@@ -1,0 +1,16 @@
+[Unit]
+Description=FedPrivTab Flask API
+After=network.target
+
+[Service]
+Type=simple
+User=fedprivtab
+Group=fedprivtab
+WorkingDirectory=/opt/fedprivtab
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/fedprivtab/.venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

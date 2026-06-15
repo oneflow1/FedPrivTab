@@ -12,15 +12,17 @@ from data_utils import client_partitions, evaluate_predictions
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int = 32):
+    def __init__(self, input_dim: int, hidden_dim: int = 32, hidden_layers: int = 2, activation: str = "ReLU"):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1),
-        )
+        activations: dict[str, type[nn.Module]] = {"ReLU": nn.ReLU, "Tanh": nn.Tanh, "LeakyReLU": nn.LeakyReLU}
+        activation_cls = activations.get(activation, nn.ReLU)
+        layers: list[nn.Module] = []
+        current_dim = input_dim
+        for _ in range(max(1, hidden_layers)):
+            layers.extend([nn.Linear(current_dim, hidden_dim), activation_cls()])
+            current_dim = hidden_dim
+        layers.append(nn.Linear(current_dim, 1))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         return self.net(inputs).squeeze(-1)
@@ -35,6 +37,11 @@ class TrainConfig:
     local_epochs: int = 1
     batch_size: int = 16
     lr: float = 0.01
+    hidden_layers: int = 2
+    hidden_units: int = 32
+    activation: str = "ReLU"
+    client_fraction: float = 1.0
+    dirichlet_alpha: float = 0.3
     clip_norm: float = 1.0
     noise_multiplier: float = 0.2
     non_iid: bool = False
@@ -94,6 +101,15 @@ def _average_states(states: list[dict[str, torch.Tensor]], weights: list[int] | 
     return averaged
 
 
+def _make_model(input_dim: int, config: TrainConfig, device: torch.device) -> MLP:
+    return MLP(
+        input_dim,
+        hidden_dim=config.hidden_units,
+        hidden_layers=config.hidden_layers,
+        activation=config.activation,
+    ).to(device)
+
+
 def _client_update(base_state: dict[str, torch.Tensor], model: nn.Module, loader: DataLoader, config: TrainConfig, device: torch.device) -> dict[str, torch.Tensor]:
     _set_state(model, base_state)
     optimizer = torch.optim.SGD(model.parameters(), lr=config.lr)
@@ -116,7 +132,8 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
     device = torch.device("cpu")
-    model = MLP(x_train.shape[1]).to(device)
+    rng = np.random.default_rng(config.seed)
+    model = _make_model(x_train.shape[1], config, device)
     history = {"loss": []}
     num_rounds = config.epochs if config.mode == "centralized" else config.rounds
 
@@ -127,16 +144,25 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
             loss = _train_epoch(model, loader, optimizer, device)
             history["loss"].append(float(loss))
     else:
-        partitions = client_partitions(y_train, num_clients=config.clients, non_iid=config.non_iid, seed=config.seed)
+        partitions = client_partitions(
+            y_train,
+            num_clients=config.clients,
+            non_iid=config.non_iid,
+            seed=config.seed,
+            alpha=config.dirichlet_alpha,
+        )
         for _ in range(num_rounds):
             base_state = _model_state(model)
             client_states = []
             client_weights = []
-            for partition in partitions:
+            selected_count = max(1, int(np.ceil(len(partitions) * config.client_fraction)))
+            selected_indices = rng.choice(len(partitions), size=min(selected_count, len(partitions)), replace=False)
+            for partition_index in selected_indices:
+                partition = partitions[int(partition_index)]
                 if len(partition) == 0:
                     continue
                 client_loader = _loader(x_train[partition], y_train[partition], config.batch_size, shuffle=True)
-                client_model = MLP(x_train.shape[1]).to(device)
+                client_model = _make_model(x_train.shape[1], config, device)
                 updated_state = _client_update(base_state, client_model, client_loader, config, device)
                 client_states.append(updated_state)
                 client_weights.append(len(partition))
@@ -161,6 +187,14 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
         "metrics": metrics,
         "history": history,
         "predictions": y_prob.tolist(),
-        "client_distribution": [{"client": index, "size": int(len(partition))} for index, partition in enumerate(client_partitions(y_train, config.clients, config.non_iid, config.seed))],
+        "client_distribution": [
+            {
+                "client": index,
+                "size": int(len(partition)),
+                "positive": int(y_train[partition].sum()),
+                "negative": int(len(partition) - y_train[partition].sum()),
+            }
+            for index, partition in enumerate(client_partitions(y_train, config.clients, config.non_iid, config.seed, config.dirichlet_alpha))
+        ],
         "dp": {"clip_norm": config.clip_norm, "noise_multiplier": config.noise_multiplier} if config.mode == "dp_fedavg" else None,
     }

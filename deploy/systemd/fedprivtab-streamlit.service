@@ -1,0 +1,17 @@
+[Unit]
+Description=FedPrivTab Streamlit UI
+After=network.target fedprivtab-api.service
+Wants=fedprivtab-api.service
+
+[Service]
+Type=simple
+User=fedprivtab
+Group=fedprivtab
+WorkingDirectory=/opt/fedprivtab
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/fedprivtab/.venv/bin/streamlit run streamlit_app.py --server.address 0.0.0.0 --server.port 8501 --server.headless true
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

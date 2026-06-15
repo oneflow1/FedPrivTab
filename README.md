@@ -7,6 +7,7 @@ FedPrivTab is a minimal end-to-end federated learning system for tabular data ex
 - Streamlit multi-page front end for client management, data review, analysis, experiment configuration, training monitoring, result analysis, and report export
 - Flask back end with health, data validation, sample generation, and training endpoints
 - PyTorch MLP training for centralized, FedAvg, and DP-FedAvg workflows
+- Preprocessing helpers for missing values, categorical encoding, and numeric scaling
 - Basic test coverage for data utilities and training pipelines
 
 ## Quick start
@@ -38,7 +39,7 @@ The Streamlit UI is organized into the eight sections described in `docs/require
 - 首页: experiment overview, client counts, data validation state, and completed training schemes
 - 客户端管理页: add clients, enable or disable clients, and inspect client status
 - 数据上传与审核页: upload CSV data, generate sample data, select the label column, and validate data
-- 数据分析页: statistical summaries, label distribution, feature means and distributions, and correlation heatmap
+- 数据分析页: statistical summaries, label distribution, client label distribution, feature means and distributions, and correlation heatmap
 - 实验配置页: configure MLP, IID / Non-IID, FedAvg, and differential privacy parameters
 - 训练监控页: run `centralized`, `fedavg`, `dp_fedavg`, or all schemes and compare loss curves
 - 结果分析页: compare scheme metrics, confusion matrices, client distributions, and DP parameters
@@ -51,6 +52,10 @@ Run tests:
 ```bash
 pytest
 ```
+
+## Ubuntu deployment
+
+Systemd unit examples live in `deploy/systemd/`, and the step-by-step Ubuntu deployment guide is in `docs/deployment.md`.
 
 ## API
 

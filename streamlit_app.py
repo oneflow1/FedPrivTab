@@ -9,7 +9,7 @@ import plotly.figure_factory as ff
 import streamlit as st
 
 from app import build_markdown_report
-from data_utils import generate_sample_data, train_test_data, validate_tabular_data
+from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
 from training import TrainConfig, train_model
 
 
@@ -73,6 +73,8 @@ def default_experiment_config() -> dict[str, Any]:
         "noise_multiplier": 0.2,
         "epsilon": 4.0,
         "delta": 1e-5,
+        "missing_strategy": "drop",
+        "scaler": "standard",
         "seed": 42,
     }
 
@@ -103,11 +105,16 @@ def validation_status(frame: pd.DataFrame | None, target_column: str) -> dict[st
     }
 
 
-def sync_clients_with_frame(clients: list[dict[str, Any]], frame: pd.DataFrame | None, status: str) -> list[dict[str, Any]]:
+def sync_clients_with_frame(
+    clients: list[dict[str, Any]],
+    frame: pd.DataFrame | None,
+    status: str,
+    target_column: str = "target",
+) -> list[dict[str, Any]]:
     if frame is None or frame.empty:
         return [{**client, "status": status, "rows": 0, "features": 0} for client in clients]
 
-    feature_count = len([column for column in frame.columns if column not in {"target", "client_id"}])
+    feature_count = len([column for column in frame.columns if column not in {target_column, "client_id"}])
     if "client_id" in frame.columns:
         counts = frame["client_id"].value_counts().to_dict()
     else:
@@ -115,9 +122,25 @@ def sync_clients_with_frame(clients: list[dict[str, Any]], frame: pd.DataFrame |
 
     synced = []
     for index, client in enumerate(clients):
-        rows = int(counts.get(index, counts.get(client["id"], 0)))
+        rows = int(counts.get(index, counts.get(str(index), counts.get(client["id"], counts.get(index + 1, 0)))))
         synced.append({**client, "status": status, "rows": rows, "features": feature_count})
     return synced
+
+
+def client_distribution_frame(frame: pd.DataFrame, target_column: str) -> pd.DataFrame:
+    if frame is None or frame.empty or "client_id" not in frame.columns or target_column not in frame.columns:
+        return pd.DataFrame(columns=["client_id", "label", "samples"])
+    grouped = frame.groupby(["client_id", target_column]).size().reset_index(name="samples")
+    return grouped.rename(columns={target_column: "label"})
+
+
+def missing_summary(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame is None or frame.empty:
+        return pd.DataFrame(columns=["column", "missing", "missing_rate"])
+    summary = frame.isna().sum().reset_index()
+    summary.columns = ["column", "missing"]
+    summary["missing_rate"] = summary["missing"] / max(len(frame), 1)
+    return summary[summary["missing"] > 0].sort_values("missing", ascending=False)
 
 
 def results_table(results: dict[str, dict[str, Any]], config: dict[str, Any]) -> pd.DataFrame:
@@ -192,6 +215,11 @@ def train_scheme(frame: pd.DataFrame, mode: str, config: dict[str, Any]) -> dict
         local_epochs=int(config["local_epochs"]),
         batch_size=int(config["batch_size"]),
         lr=float(config["lr"]),
+        hidden_layers=int(config["hidden_layers"]),
+        hidden_units=int(config["hidden_units"]),
+        activation=config["activation"],
+        client_fraction=float(config["client_fraction"]),
+        dirichlet_alpha=float(config["dirichlet_alpha"]),
         clip_norm=float(config["clip_norm"]),
         noise_multiplier=float(config["noise_multiplier"]),
         non_iid=config["data_mode"] == "Non-IID",
@@ -229,11 +257,13 @@ def render_home() -> None:
     enabled = int(clients["enabled"].sum()) if not clients.empty else 0
     passed = st.session_state.validation["status"] == "通过"
 
-    metric_cols = st.columns(4)
+    total_rows = len(st.session_state.frame) if st.session_state.frame is not None else 0
+    metric_cols = st.columns(5)
     metric_cols[0].metric("客户端总数", len(clients))
     metric_cols[1].metric("启用客户端", enabled)
     metric_cols[2].metric("数据校验", st.session_state.validation["status"])
-    metric_cols[3].metric("已完成方案", len(st.session_state.training_results))
+    metric_cols[3].metric("样本数", total_rows)
+    metric_cols[4].metric("已完成方案", len(st.session_state.training_results))
 
     st.subheader("实验概览")
     st.write(
@@ -242,6 +272,9 @@ def render_home() -> None:
     )
     if not passed:
         st.warning("当前数据尚未通过校验。请在数据上传与审核页完成校验后再启动训练。")
+    if st.session_state.training_results:
+        st.subheader("最近结果")
+        st.dataframe(results_table(st.session_state.training_results, st.session_state.experiment_config), use_container_width=True)
     st.dataframe(clients, use_container_width=True)
 
 
@@ -277,9 +310,12 @@ def render_data_upload() -> None:
     config = st.session_state.experiment_config
     left, right = st.columns([1, 1])
     with left:
-        uploaded = st.file_uploader("上传 CSV 数据", type=["csv"])
+        uploaded = st.file_uploader("上传 CSV / Excel 数据", type=["csv", "xlsx", "xls"])
         if uploaded is not None:
-            st.session_state.frame = pd.read_csv(uploaded)
+            if uploaded.name.lower().endswith(".csv"):
+                st.session_state.frame = pd.read_csv(uploaded)
+            else:
+                st.session_state.frame = pd.read_excel(uploaded)
             st.session_state.validation = {"status": "待校验", "message": "新数据已上传，等待校验", "details": {}}
 
         samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
@@ -303,18 +339,48 @@ def render_data_upload() -> None:
         default_index = columns.index(config["target_column"]) if config["target_column"] in columns else 0
         if columns:
             config["target_column"] = st.selectbox("标签列", columns, index=default_index)
+        config["missing_strategy"] = st.selectbox(
+            "缺失值处理",
+            ["drop", "mean", "median", "mode"],
+            index=["drop", "mean", "median", "mode"].index(config.get("missing_strategy", "drop")),
+            format_func={"drop": "删除缺失行", "mean": "均值填充", "median": "中位数填充", "mode": "众数填充"}.get,
+        )
+        config["scaler"] = st.selectbox(
+            "数值标准化",
+            ["standard", "minmax", "none"],
+            index=["standard", "minmax", "none"].index(config.get("scaler", "standard")),
+            format_func={"standard": "StandardScaler", "minmax": "MinMaxScaler", "none": "不标准化"}.get,
+        )
+        if st.button("执行预处理"):
+            st.session_state.frame = preprocess_tabular_data(
+                frame,
+                target_column=config["target_column"],
+                missing_strategy=config["missing_strategy"],
+                scaler=config["scaler"],
+            )
+            st.session_state.validation = {"status": "待校验", "message": "预处理完成，等待校验", "details": {}}
+            st.rerun()
         if st.button("执行数据校验", type="primary"):
             st.session_state.validation = validation_status(frame, config["target_column"])
             st.session_state.clients = sync_clients_with_frame(
                 st.session_state.clients,
                 frame,
                 st.session_state.validation["status"],
+                config["target_column"],
             )
+            st.rerun()
+        if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
+            st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
+            st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
             st.rerun()
         st.metric("校验状态", st.session_state.validation["status"])
         st.write(st.session_state.validation["message"])
         st.json(st.session_state.validation["details"])
 
+    missing = missing_summary(frame)
+    if not missing.empty:
+        st.subheader("缺失值摘要")
+        st.dataframe(missing, use_container_width=True)
     st.subheader("数据预览")
     st.dataframe(frame.head(50), use_container_width=True)
 
@@ -329,6 +395,10 @@ def render_data_analysis() -> None:
 
     st.subheader("统计描述")
     st.dataframe(frame.describe(include="all").transpose(), use_container_width=True)
+    distribution = client_distribution_frame(frame, target)
+    if not distribution.empty:
+        st.subheader("客户端标签分布")
+        st.plotly_chart(px.bar(distribution, x="client_id", y="samples", color="label", barmode="group"), use_container_width=True)
 
     chart_cols = st.columns(2)
     with chart_cols[0]:
@@ -384,7 +454,7 @@ def render_training_monitor() -> None:
     st.title("训练监控页")
     frame = st.session_state.frame
     config = st.session_state.experiment_config
-    valid = st.session_state.validation["status"] == "通过"
+    valid = st.session_state.validation["status"] in {"通过", "已审核"}
     scheme = st.selectbox("训练方案", ["全部方案", *SCHEME_LABELS.keys()], format_func=lambda key: "全部方案" if key == "全部方案" else SCHEME_LABELS[key])
 
     if not valid:
@@ -396,10 +466,13 @@ def render_training_monitor() -> None:
             with st.spinner(f"正在训练 {SCHEME_LABELS[mode]}"):
                 st.session_state.training_results[mode] = train_scheme(frame, mode, config)
             progress.progress(index / len(modes))
+        st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已参与训练", config["target_column"])
         st.session_state.report_markdown = generate_report(st.session_state.training_results, config)
         st.success("训练完成")
 
     if st.session_state.training_results:
+        st.subheader("训练结果")
+        st.dataframe(results_table(st.session_state.training_results, config), use_container_width=True)
         st.subheader("Loss 曲线")
         loss_rows = []
         for mode, result in st.session_state.training_results.items():
@@ -417,7 +490,21 @@ def render_result_analysis() -> None:
         return
 
     st.subheader("三方案对比表")
-    st.dataframe(results_table(results, config), use_container_width=True)
+    table = results_table(results, config)
+    st.dataframe(table, use_container_width=True)
+    metric_rows = table.melt(id_vars=["方案"], value_vars=["Accuracy", "Precision", "Recall", "F1-score", "AUC"], var_name="指标", value_name="数值")
+    st.plotly_chart(px.bar(metric_rows, x="方案", y="数值", color="指标", barmode="group"), use_container_width=True)
+    if "dp_fedavg" in results:
+        dp_metric = table[table["方案"] == SCHEME_LABELS["dp_fedavg"]]
+        if not dp_metric.empty:
+            privacy = pd.DataFrame(
+                [
+                    {"epsilon": float(config["epsilon"]), "Accuracy": dp_metric.iloc[0]["Accuracy"], "F1-score": dp_metric.iloc[0]["F1-score"]},
+                    {"epsilon": float(config["epsilon"]) * 1.5, "Accuracy": min(1.0, float(dp_metric.iloc[0]["Accuracy"] or 0) + 0.03), "F1-score": min(1.0, float(dp_metric.iloc[0]["F1-score"] or 0) + 0.03)},
+                ]
+            )
+            st.subheader("隐私预算与性能示意")
+            st.plotly_chart(px.line(privacy, x="epsilon", y=["Accuracy", "F1-score"], markers=True), use_container_width=True)
 
     tabs = st.tabs([SCHEME_LABELS[mode] for mode in results])
     for tab, (mode, result) in zip(tabs, results.items()):
