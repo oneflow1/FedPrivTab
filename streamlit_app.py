@@ -43,6 +43,17 @@ SCHEME_LABELS = {
     "dp_fedavg": "DP-FedAvg + MLP",
 }
 
+PAGE_ICONS = {
+    "首页": "⌂",
+    "客户端管理页": "▦",
+    "数据上传与审核页": "⇪",
+    "数据分析页": "◌",
+    "实验配置页": "⚙",
+    "训练监控页": "↗",
+    "结果分析页": "◈",
+    "报告导出页": "⇩",
+}
+
 
 def default_clients(count: int = 4) -> list[dict[str, Any]]:
     return [
@@ -258,6 +269,352 @@ def numeric_frame(frame: pd.DataFrame, target_column: str) -> pd.DataFrame:
     return frame[columns]
 
 
+def inject_global_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --fedprivtab-bg: #f6f8fb;
+            --fedprivtab-panel: #ffffff;
+            --fedprivtab-ink: #172033;
+            --fedprivtab-muted: #667085;
+            --fedprivtab-line: #e5eaf2;
+            --fedprivtab-primary: #2563eb;
+            --fedprivtab-primary-dark: #1d4ed8;
+            --fedprivtab-accent: #14b8a6;
+            --fedprivtab-soft: #eef5ff;
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.10), transparent 32rem),
+                linear-gradient(180deg, #f8fbff 0%, var(--fedprivtab-bg) 36%, #ffffff 100%);
+            color: var(--fedprivtab-ink);
+        }
+
+        section[data-testid="stSidebar"] {
+            background: #ffffff;
+            border-right: 1px solid var(--fedprivtab-line);
+        }
+
+        section[data-testid="stSidebar"] > div {
+            padding-top: 1.25rem;
+        }
+
+        .fed-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.9rem;
+        }
+
+        .fed-brand-mark {
+            width: 2.35rem;
+            height: 2.35rem;
+            border-radius: 0.8rem;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            font-weight: 800;
+            letter-spacing: 0;
+            background: linear-gradient(135deg, var(--fedprivtab-primary), var(--fedprivtab-accent));
+            box-shadow: 0 12px 30px rgba(37, 99, 235, 0.22);
+        }
+
+        .fed-brand-title {
+            font-weight: 800;
+            color: var(--fedprivtab-ink);
+            line-height: 1.05;
+            font-size: 1.05rem;
+        }
+
+        .fed-brand-subtitle {
+            color: var(--fedprivtab-muted);
+            font-size: 0.78rem;
+            margin-top: 0.15rem;
+        }
+
+        .fed-login-hero {
+            margin-top: 1.3rem;
+            padding: clamp(1.1rem, 2vw, 1.8rem);
+            border: 1px solid rgba(37, 99, 235, 0.12);
+            border-radius: 1.4rem;
+            background:
+                linear-gradient(135deg, rgba(37, 99, 235, 0.09), rgba(20, 184, 166, 0.10)),
+                #ffffff;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.09);
+            min-height: 27rem;
+        }
+
+        .fed-login-kicker {
+            color: var(--fedprivtab-primary-dark);
+            font-weight: 700;
+            font-size: 0.88rem;
+            margin-bottom: 0.85rem;
+        }
+
+        .fed-login-title {
+            color: var(--fedprivtab-ink);
+            font-size: clamp(2rem, 4vw, 4rem);
+            line-height: 1.02;
+            font-weight: 850;
+            letter-spacing: 0;
+            margin-bottom: 1rem;
+            max-width: 12ch;
+        }
+
+        .fed-login-copy {
+            color: #475467;
+            font-size: 1.04rem;
+            line-height: 1.7;
+            max-width: 42rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .fed-login-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+            margin: 1.1rem 0 0.35rem;
+        }
+
+        .fed-login-pill {
+            padding: 0.55rem 0.75rem;
+            border: 1px solid rgba(37, 99, 235, 0.14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.78);
+            color: #344054;
+            font-size: 0.9rem;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+        }
+
+        .fed-auth-card {
+            margin-top: 1.3rem;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-radius: 1.05rem 1.05rem 0 0;
+            border-bottom: 0;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            padding: 1.25rem 1.25rem 0.25rem;
+        }
+
+        .fed-auth-heading {
+            font-weight: 800;
+            font-size: 1.28rem;
+            color: var(--fedprivtab-ink);
+            margin-bottom: 0.25rem;
+        }
+
+        .fed-auth-hint {
+            color: var(--fedprivtab-muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 0.75rem;
+        }
+
+        .fed-status-hint {
+            margin-top: 0;
+            padding: 0.85rem 1rem 1rem;
+            border-radius: 0 0 1.05rem 1.05rem;
+            background: rgba(255, 255, 255, 0.94);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-top: 0;
+            color: #475467;
+            font-size: 0.86rem;
+            line-height: 1.45;
+            box-shadow: 0 22px 46px rgba(15, 23, 42, 0.10);
+        }
+
+        div[data-testid="stForm"]:has(input[aria-label="用户名"]) {
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            border-top: 0;
+            border-bottom: 0;
+            border-radius: 0;
+            padding: 0.2rem 1.25rem 0.4rem;
+            background: rgba(255, 255, 255, 0.94);
+            box-shadow: none;
+        }
+
+        div[data-testid="stTextInput"] input {
+            border-radius: 0.72rem;
+            border-color: #d7deea;
+            min-height: 2.8rem;
+        }
+
+        div[data-testid="stTextInput"] input:focus {
+            border-color: var(--fedprivtab-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        }
+
+        .stButton > button,
+        div[data-testid="stFormSubmitButton"] button {
+            border-radius: 0.72rem;
+            min-height: 2.7rem;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(37, 99, 235, 0.13);
+        }
+
+        .fed-sidebar-section {
+            color: #98a2b3;
+            font-size: 0.73rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            text-transform: uppercase;
+            margin: 0.9rem 0 0.45rem;
+        }
+
+        .fed-role-card {
+            border: 1px solid var(--fedprivtab-line);
+            border-radius: 0.9rem;
+            background: linear-gradient(180deg, #ffffff, #f8fbff);
+            padding: 0.85rem;
+            color: #475467;
+            font-size: 0.86rem;
+            line-height: 1.45;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+            margin-bottom: 0.95rem;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] {
+            gap: 0.42rem;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+            position: relative;
+            width: 100%;
+            padding: 0.72rem 0.78rem 0.72rem 0.92rem;
+            border: 1px solid transparent;
+            border-radius: 0.75rem;
+            background: transparent;
+            transition: all 160ms ease;
+            color: #344054;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+            background: #f7faff;
+            border-color: #dbe7ff;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
+            background: var(--fedprivtab-soft);
+            border-color: #bfdbfe;
+            box-shadow: 0 10px 26px rgba(37, 99, 235, 0.10);
+            color: #1e3a8a;
+            font-weight: 800;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked)::before {
+            content: "";
+            position: absolute;
+            left: 0.35rem;
+            top: 0.62rem;
+            bottom: 0.62rem;
+            width: 0.22rem;
+            border-radius: 999px;
+            background: linear-gradient(180deg, var(--fedprivtab-primary), var(--fedprivtab-accent));
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label > div:first-child {
+            display: none;
+        }
+
+        section[data-testid="stSidebar"] div[role="radiogroup"] label p {
+            font-size: 0.93rem;
+            line-height: 1.35;
+            white-space: normal;
+        }
+
+        .fed-sidebar-metrics {
+            display: grid;
+            gap: 0.55rem;
+            margin-top: 0.45rem;
+        }
+
+        .fed-sidebar-metric {
+            display: grid;
+            grid-template-columns: 2rem 1fr;
+            gap: 0.65rem;
+            align-items: center;
+            border: 1px solid var(--fedprivtab-line);
+            border-radius: 0.85rem;
+            background: #ffffff;
+            padding: 0.72rem;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.035);
+        }
+
+        .fed-sidebar-metric-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.65rem;
+            display: grid;
+            place-items: center;
+            color: var(--fedprivtab-primary-dark);
+            background: var(--fedprivtab-soft);
+            font-weight: 800;
+        }
+
+        .fed-sidebar-metric-label {
+            color: var(--fedprivtab-muted);
+            font-size: 0.74rem;
+            line-height: 1.2;
+        }
+
+        .fed-sidebar-metric-value {
+            color: var(--fedprivtab-ink);
+            font-weight: 800;
+            font-size: 1rem;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+
+        @media (max-width: 760px) {
+            .fed-login-title {
+                max-width: none;
+            }
+
+            .fed-login-hero {
+                border-radius: 1rem;
+                min-height: auto;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def page_label(page: str) -> str:
+    return f"{PAGE_ICONS.get(page, '•')}  {page}"
+
+
+def render_brand(compact: bool = False) -> None:
+    subtitle = "隐私保护表格联邦学习" if compact else "Federated Privacy for Tabular ML"
+    st.markdown(
+        f"""
+        <div class="fed-brand">
+            <div class="fed-brand-mark">FP</div>
+            <div>
+                <div class="fed-brand-title">FedPrivTab</div>
+                <div class="fed-brand-subtitle">{subtitle}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def sidebar_metric_card(label: str, value: Any, icon: str) -> str:
+    return f"""
+    <div class="fed-sidebar-metric">
+        <div class="fed-sidebar-metric-icon">{icon}</div>
+        <div>
+            <div class="fed-sidebar-metric-label">{label}</div>
+            <div class="fed-sidebar-metric-value">{value}</div>
+        </div>
+    </div>
+    """
+
+
 def current_user() -> dict[str, Any] | None:
     user = st.session_state.get("auth_user")
     return dict(user) if user else None
@@ -268,16 +625,13 @@ def allowed_pages(role: str) -> list[str]:
 
 
 def render_top_bar() -> None:
-    left, right = st.columns([3, 2])
     user = current_user()
-    with left:
-        st.title("FedPrivTab")
-        if user:
+    if user:
+        left, right = st.columns([3, 2])
+        with left:
+            render_brand()
             st.caption(f"当前用户: {user['username']} | 角色: {user['role']}")
-        else:
-            st.caption("请登录后访问系统页面")
-    with right:
-        if user:
+        with right:
             st.write("")
             st.write("")
             cols = st.columns([2, 1])
@@ -287,27 +641,65 @@ def render_top_bar() -> None:
                 st.session_state.auth_session_id = None
                 st.session_state.auth_user = None
                 st.rerun()
-        else:
-            with st.form("login-form"):
-                username = st.text_input("用户名")
-                password = st.text_input("密码", type="password")
-                submitted = st.form_submit_button("登录", use_container_width=True)
-            if submitted:
-                session = auth_db.login(username, password)
-                if session:
-                    st.session_state.auth_session_id = session["session_id"]
-                    st.session_state.auth_user = {
-                        "username": session["username"],
-                        "role": session["role"],
-                        "session_id": session["session_id"],
-                    }
-                    st.rerun()
-                else:
-                    st.error("用户名或密码错误")
+        return
+
+    render_brand()
+    hero, login = st.columns([1.45, 0.9], gap="large")
+    with hero:
+        st.markdown(
+            """
+            <div class="fed-login-hero">
+                <div class="fed-login-kicker">Secure collaborative tabular learning</div>
+                <div class="fed-login-title">FedPrivTab 实验控制台</div>
+                <div class="fed-login-copy">
+                    面向集中式 MLP、FedAvg 与 DP-FedAvg 的轻量实验工作台，统一管理客户端、
+                    数据审核、训练监控和结果报告。
+                </div>
+                <div class="fed-login-pills">
+                    <span class="fed-login-pill">Client governance</span>
+                    <span class="fed-login-pill">Non-IID analysis</span>
+                    <span class="fed-login-pill">Differential privacy</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with login:
+        st.markdown(
+            """
+            <div class="fed-auth-card">
+                <div class="fed-auth-heading">登录工作台</div>
+                <div class="fed-auth-hint">使用演示账号进入对应角色页面，登录状态会在本机 SQLite 会话中保留。</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        with st.form("login-form"):
+            username = st.text_input("用户名")
+            password = st.text_input("密码", type="password")
+            submitted = st.form_submit_button("登录", use_container_width=True)
+        if submitted:
+            session = auth_db.login(username, password)
+            if session:
+                st.session_state.auth_session_id = session["session_id"]
+                st.session_state.auth_user = {
+                    "username": session["username"],
+                    "role": session["role"],
+                    "session_id": session["session_id"],
+                }
+                st.rerun()
+            else:
+                st.error("用户名或密码错误")
+        st.markdown(
+            """
+            <div class="fed-status-hint">状态提示: 未登录。默认账号见 README，系统会按角色开放页面。</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def render_login_required() -> None:
-    st.info("请使用右上角登录入口登录后继续。")
+    return None
 
 
 def render_sidebar() -> str:
@@ -315,14 +707,20 @@ def render_sidebar() -> str:
     role = user["role"] if user else ""
     pages = allowed_pages(role)
     with st.sidebar:
-        st.header("FedPrivTab")
-        st.info(ROLE_HINTS.get(role, "请先登录。"))
-        page = st.radio("页面", pages)
-        st.divider()
+        render_brand(compact=True)
+        st.markdown(f'<div class="fed-role-card">{ROLE_HINTS.get(role, "请先登录。")}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="fed-sidebar-section">Navigation</div>', unsafe_allow_html=True)
+        page = st.radio("页面", pages, format_func=page_label, label_visibility="collapsed")
+        st.markdown('<div class="fed-sidebar-section">Workspace Status</div>', unsafe_allow_html=True)
         status = st.session_state.validation["status"]
-        st.metric("客户端", len(st.session_state.clients))
-        st.metric("数据状态", status)
-        st.metric("训练结果", len(st.session_state.training_results))
+        metrics = "\n".join(
+            [
+                sidebar_metric_card("客户端", len(st.session_state.clients), "▦"),
+                sidebar_metric_card("数据状态", status, "✓" if status in {"通过", "已审核"} else "!"),
+                sidebar_metric_card("训练结果", len(st.session_state.training_results), "↗"),
+            ]
+        )
+        st.markdown(f'<div class="fed-sidebar-metrics">{metrics}</div>', unsafe_allow_html=True)
     return page
 
 
@@ -616,6 +1014,7 @@ def render_report_export() -> None:
 def main() -> None:
     st.set_page_config(page_title="FedPrivTab", layout="wide")
     initialize_state()
+    inject_global_styles()
     render_top_bar()
     if not current_user():
         render_login_required()
