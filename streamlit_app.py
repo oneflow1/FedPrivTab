@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html import escape
 from typing import Any
 
 import numpy as np
@@ -454,6 +455,209 @@ def inject_global_styles() -> None:
             box-shadow: 0 10px 24px rgba(37, 99, 235, 0.13);
         }
 
+        .fed-top-shell {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: 0.2rem 0 1.1rem;
+        }
+
+        .fed-user-badge {
+            margin-left: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.55rem;
+            padding: 0.42rem 0.55rem 0.42rem 0.46rem;
+            border: 1px solid var(--fedprivtab-line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.92);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.055);
+            max-width: 24rem;
+        }
+
+        .fed-user-avatar {
+            width: 1.85rem;
+            height: 1.85rem;
+            border-radius: 999px;
+            display: grid;
+            place-items: center;
+            color: #ffffff;
+            background: var(--fedprivtab-primary);
+            font-size: 0.76rem;
+            font-weight: 850;
+        }
+
+        .fed-user-name {
+            color: var(--fedprivtab-ink);
+            font-weight: 800;
+            line-height: 1.1;
+            font-size: 0.9rem;
+        }
+
+        .fed-user-role {
+            color: var(--fedprivtab-muted);
+            font-size: 0.74rem;
+            line-height: 1.15;
+        }
+
+        .fed-section-card {
+            border: 1px solid var(--fedprivtab-line);
+            border-radius: 0.95rem;
+            background: rgba(255, 255, 255, 0.96);
+            padding: 1rem;
+            box-shadow: 0 12px 34px rgba(15, 23, 42, 0.045);
+            margin-bottom: 0.85rem;
+        }
+
+        .fed-section-title {
+            font-size: 1rem;
+            font-weight: 850;
+            color: var(--fedprivtab-ink);
+            margin-bottom: 0.18rem;
+        }
+
+        .fed-section-copy {
+            color: var(--fedprivtab-muted);
+            font-size: 0.88rem;
+            line-height: 1.45;
+            margin-bottom: 0.8rem;
+        }
+
+        .fed-kpi-card {
+            border: 1px solid var(--fedprivtab-line);
+            border-radius: 0.85rem;
+            background: #ffffff;
+            padding: 0.85rem;
+            min-height: 5.5rem;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.035);
+        }
+
+        .fed-kpi-label {
+            color: var(--fedprivtab-muted);
+            font-size: 0.78rem;
+            font-weight: 750;
+            margin-bottom: 0.3rem;
+        }
+
+        .fed-kpi-value {
+            color: var(--fedprivtab-ink);
+            font-size: 1.45rem;
+            line-height: 1.1;
+            font-weight: 850;
+            overflow-wrap: anywhere;
+        }
+
+        .fed-kpi-note {
+            color: #7b8798;
+            font-size: 0.75rem;
+            line-height: 1.35;
+            margin-top: 0.35rem;
+        }
+
+        .fed-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            border-radius: 999px;
+            padding: 0.2rem 0.48rem;
+            font-size: 0.76rem;
+            font-weight: 800;
+            border: 1px solid #dbe7ff;
+            background: var(--fedprivtab-soft);
+            color: #1e40af;
+            white-space: nowrap;
+        }
+
+        .fed-tag-ok {
+            background: #ecfdf3;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .fed-tag-warn {
+            background: #fff7ed;
+            border-color: #fed7aa;
+            color: #9a3412;
+        }
+
+        .fed-tag-muted {
+            background: #f2f4f7;
+            border-color: #e4e7ec;
+            color: #475467;
+        }
+
+        .fed-empty-state {
+            max-width: 42rem;
+            margin: 2rem auto 1rem;
+            text-align: center;
+            border: 1px dashed #cbd5e1;
+            border-radius: 1rem;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 1.4rem;
+        }
+
+        .fed-empty-icon {
+            width: 2.6rem;
+            height: 2.6rem;
+            margin: 0 auto 0.8rem;
+            border-radius: 0.85rem;
+            display: grid;
+            place-items: center;
+            color: #1d4ed8;
+            background: var(--fedprivtab-soft);
+            font-weight: 900;
+        }
+
+        .fed-empty-title {
+            color: var(--fedprivtab-ink);
+            font-weight: 850;
+            font-size: 1.08rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .fed-empty-copy {
+            color: var(--fedprivtab-muted);
+            line-height: 1.55;
+            font-size: 0.9rem;
+        }
+
+        .fed-mini-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 0.5rem;
+        }
+
+        .fed-mini-table th {
+            color: #667085;
+            font-size: 0.76rem;
+            text-align: left;
+            font-weight: 850;
+            padding: 0 0.65rem;
+        }
+
+        .fed-mini-table td {
+            background: #ffffff;
+            border-top: 1px solid var(--fedprivtab-line);
+            border-bottom: 1px solid var(--fedprivtab-line);
+            padding: 0.68rem 0.65rem;
+            color: #344054;
+            font-size: 0.9rem;
+        }
+
+        .fed-mini-table td:first-child {
+            border-left: 1px solid var(--fedprivtab-line);
+            border-radius: 0.7rem 0 0 0.7rem;
+            font-weight: 800;
+            color: var(--fedprivtab-ink);
+        }
+
+        .fed-mini-table td:last-child {
+            border-right: 1px solid var(--fedprivtab-line);
+            border-radius: 0 0.7rem 0.7rem 0;
+        }
+
         .fed-sidebar-section {
             color: #98a2b3;
             font-size: 0.73rem;
@@ -587,6 +791,83 @@ def page_label(page: str) -> str:
     return f"{PAGE_ICONS.get(page, '•')}  {page}"
 
 
+def status_tag(status: Any) -> str:
+    text = escape(str(status))
+    status_text = str(status)
+    css_class = "fed-tag-muted"
+    if status_text in {"通过", "已审核", "已参与训练", "启用"}:
+        css_class = "fed-tag-ok"
+    elif status_text in {"失败", "禁用", "待校验"}:
+        css_class = "fed-tag-warn"
+    return f'<span class="fed-tag {css_class}">{text}</span>'
+
+
+def kpi_card(label: str, value: Any, note: str = "") -> str:
+    note_html = f'<div class="fed-kpi-note">{escape(str(note))}</div>' if note else ""
+    return f"""
+    <div class="fed-kpi-card">
+        <div class="fed-kpi-label">{escape(str(label))}</div>
+        <div class="fed-kpi-value">{escape(str(value))}</div>
+        {note_html}
+    </div>
+    """
+
+
+def section_card(title: str, copy: str = "") -> None:
+    copy_html = f'<div class="fed-section-copy">{escape(copy)}</div>' if copy else ""
+    st.markdown(
+        f"""
+        <div class="fed-section-card">
+            <div class="fed-section-title">{escape(title)}</div>
+            {copy_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def empty_state(title: str, copy: str, icon: str = "i") -> None:
+    st.markdown(
+        f"""
+        <div class="fed-empty-state">
+            <div class="fed-empty-icon">{escape(icon)}</div>
+            <div class="fed-empty-title">{escape(title)}</div>
+            <div class="fed-empty-copy">{escape(copy)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def metric_row(cards: list[tuple[str, Any, str]]) -> None:
+    columns = st.columns(len(cards))
+    for column, (label, value, note) in zip(columns, cards):
+        column.markdown(kpi_card(label, value, note), unsafe_allow_html=True)
+
+
+def client_table_html(clients: list[dict[str, Any]]) -> str:
+    rows = []
+    for client in clients:
+        enabled = "启用" if client.get("enabled") else "禁用"
+        rows.append(
+            "<tr>"
+            f"<td>{escape(str(client.get('id', '')))}</td>"
+            f"<td>{escape(str(client.get('name', '')))}</td>"
+            f"<td>{status_tag(enabled)}</td>"
+            f"<td>{status_tag(client.get('status', ''))}</td>"
+            f"<td>{escape(str(client.get('rows', 0)))}</td>"
+            f"<td>{escape(str(client.get('features', 0)))}</td>"
+            "</tr>"
+        )
+    return (
+        '<table class="fed-mini-table"><thead><tr>'
+        "<th>ID</th><th>名称</th><th>参与</th><th>状态</th><th>样本</th><th>特征</th>"
+        "</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+
+
 def render_brand(compact: bool = False) -> None:
     subtitle = "隐私保护表格联邦学习" if compact else "Federated Privacy for Tabular ML"
     st.markdown(
@@ -606,10 +887,10 @@ def render_brand(compact: bool = False) -> None:
 def sidebar_metric_card(label: str, value: Any, icon: str) -> str:
     return f"""
     <div class="fed-sidebar-metric">
-        <div class="fed-sidebar-metric-icon">{icon}</div>
+        <div class="fed-sidebar-metric-icon">{escape(str(icon))}</div>
         <div>
-            <div class="fed-sidebar-metric-label">{label}</div>
-            <div class="fed-sidebar-metric-value">{value}</div>
+            <div class="fed-sidebar-metric-label">{escape(str(label))}</div>
+            <div class="fed-sidebar-metric-value">{escape(str(value))}</div>
         </div>
     </div>
     """
@@ -627,16 +908,31 @@ def allowed_pages(role: str) -> list[str]:
 def render_top_bar() -> None:
     user = current_user()
     if user:
-        left, right = st.columns([3, 2])
+        left, right = st.columns([3.4, 1.2])
         with left:
             render_brand()
-            st.caption(f"当前用户: {user['username']} | 角色: {user['role']}")
         with right:
-            st.write("")
-            st.write("")
-            cols = st.columns([2, 1])
-            cols[0].success(f"已登录: {user['username']}")
-            if cols[1].button("退出登录", use_container_width=True):
+            initials = "".join(part[:1] for part in str(user["username"]).split())[:2].upper() or "U"
+            st.markdown(
+                f"""
+                <div class="fed-user-badge">
+                    <div class="fed-user-avatar">{escape(initials)}</div>
+                    <div>
+                        <div class="fed-user-name">{escape(str(user["username"]))}</div>
+                        <div class="fed-user-role">{escape(str(user["role"]))}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            if hasattr(st, "popover"):
+                with st.popover("账户", use_container_width=True):
+                    st.caption(f"已登录为 {user['username']}")
+                    st.caption(user["role"])
+                    logout_clicked = st.button("退出登录", type="secondary", use_container_width=True)
+            else:
+                logout_clicked = st.button("退出登录", type="secondary", use_container_width=True)
+            if logout_clicked:
                 auth_db.logout(user["session_id"])
                 st.session_state.auth_session_id = None
                 st.session_state.auth_user = None
@@ -708,7 +1004,7 @@ def render_sidebar() -> str:
     pages = allowed_pages(role)
     with st.sidebar:
         render_brand(compact=True)
-        st.markdown(f'<div class="fed-role-card">{ROLE_HINTS.get(role, "请先登录。")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="fed-role-card">{escape(ROLE_HINTS.get(role, "请先登录。"))}</div>', unsafe_allow_html=True)
         st.markdown('<div class="fed-sidebar-section">Navigation</div>', unsafe_allow_html=True)
         page = st.radio("页面", pages, format_func=page_label, label_visibility="collapsed")
         st.markdown('<div class="fed-sidebar-section">Workspace Status</div>', unsafe_allow_html=True)
@@ -754,109 +1050,139 @@ def render_home() -> None:
 
 def render_client_management() -> None:
     st.title("客户端管理页")
-    with st.form("add-client", clear_on_submit=True):
-        name = st.text_input("客户端名称")
-        submitted = st.form_submit_button("新增客户端")
-    if submitted and name.strip():
-        next_id = f"client-{len(st.session_state.clients) + 1}"
-        st.session_state.clients.append(
-            {"id": next_id, "name": name.strip(), "enabled": True, "status": "待校验", "rows": 0, "features": 0}
-        )
-        st.rerun()
+    clients_frame = pd.DataFrame(st.session_state.clients)
+    enabled = int(clients_frame["enabled"].sum()) if not clients_frame.empty else 0
+    metric_row(
+        [
+            ("客户端", len(st.session_state.clients), "已登记节点"),
+            ("启用", enabled, "参与训练候选"),
+            ("数据状态", st.session_state.validation["status"], st.session_state.validation["message"]),
+        ]
+    )
 
-    for index, client in enumerate(st.session_state.clients):
-        cols = st.columns([2, 2, 1, 1, 1])
-        cols[0].write(client["id"])
-        cols[1].write(client["name"])
-        cols[2].write("启用" if client["enabled"] else "禁用")
-        cols[3].write(client["status"])
-        label = "禁用" if client["enabled"] else "启用"
-        if cols[4].button(label, key=f"toggle-{client['id']}"):
-            st.session_state.clients[index]["enabled"] = not client["enabled"]
+    with st.container(border=True):
+        st.markdown("#### 添加客户端")
+        with st.form("add-client", clear_on_submit=True):
+            name_col, submit_col = st.columns([4, 1])
+            name = name_col.text_input("客户端名称", placeholder="例如 client-east-01", label_visibility="collapsed")
+            submitted = submit_col.form_submit_button("新增", use_container_width=True)
+        if submitted and name.strip():
+            next_id = f"client-{len(st.session_state.clients) + 1}"
+            st.session_state.clients.append(
+                {"id": next_id, "name": name.strip(), "enabled": True, "status": "待校验", "rows": 0, "features": 0}
+            )
             st.rerun()
 
-    st.subheader("状态表")
-    st.dataframe(pd.DataFrame(st.session_state.clients), use_container_width=True)
+    st.markdown("#### 客户端清单")
+    st.markdown(client_table_html(st.session_state.clients), unsafe_allow_html=True)
+    for index, client in enumerate(st.session_state.clients):
+        cols = st.columns([4, 1])
+        cols[0].caption(f"{client['id']} · {client['name']}")
+        label = "禁用" if client["enabled"] else "启用"
+        if cols[1].button(label, key=f"toggle-{client['id']}", use_container_width=True):
+            st.session_state.clients[index]["enabled"] = not client["enabled"]
+            st.rerun()
 
 
 def render_data_upload() -> None:
     st.title("数据上传与审核页")
     config = st.session_state.experiment_config
-    left, right = st.columns([1, 1])
-    with left:
-        uploaded = st.file_uploader("上传 CSV / Excel 数据", type=["csv", "xlsx", "xls"])
-        if uploaded is not None:
-            if uploaded.name.lower().endswith(".csv"):
-                st.session_state.frame = pd.read_csv(uploaded)
-            else:
-                st.session_state.frame = pd.read_excel(uploaded)
-            st.session_state.validation = {"status": "待校验", "message": "新数据已上传，等待校验", "details": {}}
+    frame = st.session_state.frame
+    metric_row(
+        [
+            ("当前状态", st.session_state.validation["status"], st.session_state.validation["message"]),
+            ("样本数", len(frame) if frame is not None else 0, "当前工作数据集"),
+            ("字段数", len(frame.columns) if frame is not None else 0, "包含标签与客户端列"),
+        ]
+    )
 
-        samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
-        features = st.number_input("示例特征数", min_value=2, max_value=50, value=int(config["features"]), step=1)
-        clients = st.number_input("示例客户端数", min_value=2, max_value=20, value=int(config["clients"]), step=1)
-        if st.button("生成示例数据"):
-            config.update({"samples": int(samples), "features": int(features), "clients": int(clients)})
-            st.session_state.frame = generate_sample_data(
-                samples=int(samples),
-                features=int(features),
-                clients=int(clients),
-                seed=int(config["seed"]),
-            )
-            st.session_state.clients = default_clients(int(clients))
-            st.session_state.validation = {"status": "待校验", "message": "示例数据已生成，等待校验", "details": {}}
-            st.rerun()
+    steps = st.columns(3)
+    with steps[0]:
+        with st.container(border=True):
+            st.markdown("#### 1. 获取数据")
+            uploaded = st.file_uploader("上传 CSV / Excel 数据", type=["csv", "xlsx", "xls"])
+            if uploaded is not None:
+                if uploaded.name.lower().endswith(".csv"):
+                    st.session_state.frame = pd.read_csv(uploaded)
+                else:
+                    st.session_state.frame = pd.read_excel(uploaded)
+                st.session_state.validation = {"status": "待校验", "message": "新数据已上传，等待校验", "details": {}}
+
+            samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
+            features = st.number_input("示例特征数", min_value=2, max_value=50, value=int(config["features"]), step=1)
+            clients = st.number_input("示例客户端数", min_value=2, max_value=20, value=int(config["clients"]), step=1)
+            if st.button("生成示例数据"):
+                config.update({"samples": int(samples), "features": int(features), "clients": int(clients)})
+                st.session_state.frame = generate_sample_data(
+                    samples=int(samples),
+                    features=int(features),
+                    clients=int(clients),
+                    seed=int(config["seed"]),
+                )
+                st.session_state.clients = default_clients(int(clients))
+                st.session_state.validation = {"status": "待校验", "message": "示例数据已生成，等待校验", "details": {}}
+                st.rerun()
 
     frame = st.session_state.frame
-    with right:
-        columns = list(frame.columns) if frame is not None else []
-        default_index = columns.index(config["target_column"]) if config["target_column"] in columns else 0
-        if columns:
-            config["target_column"] = st.selectbox("标签列", columns, index=default_index)
-        config["missing_strategy"] = st.selectbox(
-            "缺失值处理",
-            ["drop", "mean", "median", "mode"],
-            index=["drop", "mean", "median", "mode"].index(config.get("missing_strategy", "drop")),
-            format_func={"drop": "删除缺失行", "mean": "均值填充", "median": "中位数填充", "mode": "众数填充"}.get,
-        )
-        config["scaler"] = st.selectbox(
-            "数值标准化",
-            ["standard", "minmax", "none"],
-            index=["standard", "minmax", "none"].index(config.get("scaler", "standard")),
-            format_func={"standard": "StandardScaler", "minmax": "MinMaxScaler", "none": "不标准化"}.get,
-        )
-        if st.button("执行预处理"):
-            st.session_state.frame = preprocess_tabular_data(
-                frame,
-                target_column=config["target_column"],
-                missing_strategy=config["missing_strategy"],
-                scaler=config["scaler"],
+    with steps[1]:
+        with st.container(border=True):
+            st.markdown("#### 2. 预处理")
+            columns = list(frame.columns) if frame is not None else []
+            default_index = columns.index(config["target_column"]) if config["target_column"] in columns else 0
+            if columns:
+                config["target_column"] = st.selectbox("标签列", columns, index=default_index)
+            config["missing_strategy"] = st.selectbox(
+                "缺失值处理",
+                ["drop", "mean", "median", "mode"],
+                index=["drop", "mean", "median", "mode"].index(config.get("missing_strategy", "drop")),
+                format_func={"drop": "删除缺失行", "mean": "均值填充", "median": "中位数填充", "mode": "众数填充"}.get,
             )
-            st.session_state.validation = {"status": "待校验", "message": "预处理完成，等待校验", "details": {}}
-            st.rerun()
-        if st.button("执行数据校验", type="primary"):
-            st.session_state.validation = validation_status(frame, config["target_column"])
-            st.session_state.clients = sync_clients_with_frame(
-                st.session_state.clients,
-                frame,
-                st.session_state.validation["status"],
-                config["target_column"],
+            config["scaler"] = st.selectbox(
+                "数值标准化",
+                ["standard", "minmax", "none"],
+                index=["standard", "minmax", "none"].index(config.get("scaler", "standard")),
+                format_func={"standard": "StandardScaler", "minmax": "MinMaxScaler", "none": "不标准化"}.get,
             )
-            st.rerun()
-        if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
-            st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
-            st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
-            st.rerun()
-        st.metric("校验状态", st.session_state.validation["status"])
-        st.write(st.session_state.validation["message"])
-        st.json(st.session_state.validation["details"])
+            if st.button("执行预处理"):
+                st.session_state.frame = preprocess_tabular_data(
+                    frame,
+                    target_column=config["target_column"],
+                    missing_strategy=config["missing_strategy"],
+                    scaler=config["scaler"],
+                )
+                st.session_state.validation = {"status": "待校验", "message": "预处理完成，等待校验", "details": {}}
+                st.rerun()
+
+    with steps[2]:
+        with st.container(border=True):
+            st.markdown("#### 3. 校验与审核")
+            if st.button("执行数据校验", type="primary"):
+                st.session_state.validation = validation_status(frame, config["target_column"])
+                st.session_state.clients = sync_clients_with_frame(
+                    st.session_state.clients,
+                    frame,
+                    st.session_state.validation["status"],
+                    config["target_column"],
+                )
+                st.rerun()
+            if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
+                st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
+                st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
+                st.rerun()
+            st.markdown(status_tag(st.session_state.validation["status"]), unsafe_allow_html=True)
+            st.caption(st.session_state.validation["message"])
+            with st.expander("校验详情", expanded=False):
+                st.json(st.session_state.validation["details"])
 
     missing = missing_summary(frame)
     if not missing.empty:
-        st.subheader("缺失值摘要")
-        st.dataframe(missing, use_container_width=True)
-    st.subheader("数据预览")
-    st.dataframe(frame.head(50), use_container_width=True)
+        with st.container(border=True):
+            st.markdown("#### 缺失值摘要")
+            st.dataframe(missing, use_container_width=True, hide_index=True)
+    with st.container(border=True):
+        st.markdown("#### 数据预览")
+        st.caption("预览前 50 行，完整训练仍使用当前工作数据集。")
+        st.dataframe(frame.head(50), use_container_width=True)
 
 
 def render_data_analysis() -> None:
@@ -864,64 +1190,104 @@ def render_data_analysis() -> None:
     frame = st.session_state.frame
     target = st.session_state.experiment_config["target_column"]
     if frame is None or frame.empty:
-        st.warning("暂无数据。")
+        empty_state("暂无可分析数据", "请先上传或生成数据，并完成必要的预处理。", "◌")
         return
 
-    st.subheader("统计描述")
-    st.dataframe(frame.describe(include="all").transpose(), use_container_width=True)
-    distribution = client_distribution_frame(frame, target)
-    if not distribution.empty:
-        st.subheader("客户端标签分布")
-        st.plotly_chart(px.bar(distribution, x="client_id", y="samples", color="label", barmode="group"), use_container_width=True)
+    numeric = numeric_frame(frame, target)
+    missing = int(frame.isna().sum().sum())
+    metric_row(
+        [
+            ("样本", len(frame), "当前数据行数"),
+            ("字段", len(frame.columns), "包含标签与客户端列"),
+            ("数值特征", len(numeric.columns), "用于建模分析"),
+            ("缺失值", missing, "全表缺失单元格"),
+        ]
+    )
 
+    with st.container(border=True):
+        st.markdown("#### 统计摘要")
+        st.caption("按字段查看基础统计，便于快速识别异常范围、类别列和缺失风险。")
+        st.dataframe(frame.describe(include="all").transpose(), use_container_width=True)
+
+    distribution = client_distribution_frame(frame, target)
     chart_cols = st.columns(2)
     with chart_cols[0]:
-        st.subheader("标签分布")
-        if target in frame.columns:
-            st.plotly_chart(px.histogram(frame, x=target, color=target), use_container_width=True)
+        with st.container(border=True):
+            st.markdown("#### 标签分布")
+            st.caption("检查分类均衡性，避免训练指标被单一标签主导。")
+            if target in frame.columns:
+                st.plotly_chart(px.histogram(frame, x=target, color=target), use_container_width=True)
     with chart_cols[1]:
-        st.subheader("特征均值")
-        means = numeric_frame(frame, target).mean().reset_index()
-        means.columns = ["feature", "mean"]
-        st.plotly_chart(px.bar(means, x="feature", y="mean"), use_container_width=True)
+        with st.container(border=True):
+            st.markdown("#### 特征均值")
+            st.caption("比较数值特征中心位置，辅助判断标准化是否生效。")
+            means = numeric.mean().reset_index()
+            means.columns = ["feature", "mean"]
+            st.plotly_chart(px.bar(means, x="feature", y="mean"), use_container_width=True)
 
-    numeric = numeric_frame(frame, target)
+    if not distribution.empty:
+        with st.container(border=True):
+            st.markdown("#### 客户端标签分布")
+            st.caption("展示各客户端的标签构成，用于观察 IID / Non-IID 差异。")
+            st.plotly_chart(px.bar(distribution, x="client_id", y="samples", color="label", barmode="group"), use_container_width=True)
+
     if not numeric.empty:
-        feature = st.selectbox("特征分布", numeric.columns)
-        st.plotly_chart(px.histogram(frame, x=feature, color=target if target in frame.columns else None), use_container_width=True)
-        st.subheader("相关性热力图")
-        corr = numeric.corr()
-        st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="RdBu_r"), use_container_width=True)
+        detail_cols = st.columns(2)
+        with detail_cols[0]:
+            with st.container(border=True):
+                st.markdown("#### 单特征分布")
+                feature = st.selectbox("特征", numeric.columns)
+                st.plotly_chart(px.histogram(frame, x=feature, color=target if target in frame.columns else None), use_container_width=True)
+        with detail_cols[1]:
+            with st.container(border=True):
+                st.markdown("#### 相关性热力图")
+                st.caption("用于发现高度相关特征，避免冗余输入影响模型解释。")
+                corr = numeric.corr()
+                st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="RdBu_r"), use_container_width=True)
 
 
 def render_experiment_config() -> None:
     st.title("实验配置页")
     config = st.session_state.experiment_config
-    tabs = st.tabs(["MLP", "IID / Non-IID", "FedAvg", "差分隐私"])
-    with tabs[0]:
-        config["hidden_layers"] = st.slider("隐藏层数量", 1, 4, int(config["hidden_layers"]))
-        config["hidden_units"] = st.slider("隐藏层神经元数", 8, 128, int(config["hidden_units"]), step=8)
-        config["activation"] = st.selectbox("激活函数", ["ReLU", "Tanh", "LeakyReLU"], index=["ReLU", "Tanh", "LeakyReLU"].index(config["activation"]))
-        config["lr"] = st.number_input("学习率", 0.0001, 1.0, float(config["lr"]), step=0.001, format="%.4f")
-        config["batch_size"] = st.number_input("Batch Size", 4, 128, int(config["batch_size"]), step=4)
-        config["epochs"] = st.number_input("集中式 Epoch", 1, 50, int(config["epochs"]), step=1)
-    with tabs[1]:
-        config["data_mode"] = st.radio("数据模式", ["IID", "Non-IID"], index=1 if config["data_mode"] == "Non-IID" else 0, horizontal=True)
-        config["dirichlet_alpha"] = st.slider("Dirichlet alpha", 0.05, 5.0, float(config["dirichlet_alpha"]), step=0.05)
-        config["seed"] = st.number_input("随机种子", 1, 9999, int(config["seed"]), step=1)
-    with tabs[2]:
-        config["clients"] = st.number_input("客户端数量", 2, 20, int(config["clients"]), step=1)
-        config["rounds"] = st.number_input("通信轮数", 1, 50, int(config["rounds"]), step=1)
-        config["local_epochs"] = st.number_input("本地 Epoch", 1, 10, int(config["local_epochs"]), step=1)
-        config["client_fraction"] = st.slider("客户端采样比例", 0.1, 1.0, float(config["client_fraction"]), step=0.1)
-        config["aggregation"] = st.selectbox("聚合方式", ["FedAvg"], index=0)
-    with tabs[3]:
-        config["clip_norm"] = st.number_input("裁剪阈值 C", 0.1, 10.0, float(config["clip_norm"]), step=0.1)
-        config["noise_multiplier"] = st.number_input("噪声倍率 sigma", 0.0, 5.0, float(config["noise_multiplier"]), step=0.1)
-        config["epsilon"] = st.number_input("隐私预算 epsilon", 0.1, 100.0, float(config["epsilon"]), step=0.1)
-        config["delta"] = st.number_input("松弛参数 delta", 1e-8, 1e-2, float(config["delta"]), format="%.8f")
-    st.subheader("当前配置")
-    st.json(config)
+    workbench, summary = st.columns([2.2, 1])
+    with workbench:
+        with st.container(border=True):
+            st.markdown("#### 常用配置")
+            common_cols = st.columns(2)
+            with common_cols[0]:
+                config["data_mode"] = st.radio("数据模式", ["IID", "Non-IID"], index=1 if config["data_mode"] == "Non-IID" else 0, horizontal=True)
+                config["clients"] = st.number_input("客户端数量", 2, 20, int(config["clients"]), step=1)
+                config["rounds"] = st.number_input("通信轮数", 1, 50, int(config["rounds"]), step=1)
+            with common_cols[1]:
+                config["hidden_layers"] = st.slider("隐藏层数量", 1, 4, int(config["hidden_layers"]))
+                config["hidden_units"] = st.slider("隐藏层神经元数", 8, 128, int(config["hidden_units"]), step=8)
+                config["activation"] = st.selectbox("激活函数", ["ReLU", "Tanh", "LeakyReLU"], index=["ReLU", "Tanh", "LeakyReLU"].index(config["activation"]))
+
+        with st.expander("高级训练参数", expanded=False):
+            adv_cols = st.columns(2)
+            with adv_cols[0]:
+                config["lr"] = st.number_input("学习率", 0.0001, 1.0, float(config["lr"]), step=0.001, format="%.4f")
+                config["batch_size"] = st.number_input("Batch Size", 4, 128, int(config["batch_size"]), step=4)
+                config["epochs"] = st.number_input("集中式 Epoch", 1, 50, int(config["epochs"]), step=1)
+                config["local_epochs"] = st.number_input("本地 Epoch", 1, 10, int(config["local_epochs"]), step=1)
+                config["client_fraction"] = st.slider("客户端采样比例", 0.1, 1.0, float(config["client_fraction"]), step=0.1)
+            with adv_cols[1]:
+                config["dirichlet_alpha"] = st.slider("Dirichlet alpha", 0.05, 5.0, float(config["dirichlet_alpha"]), step=0.05)
+                config["aggregation"] = st.selectbox("聚合方式", ["FedAvg"], index=0)
+                config["clip_norm"] = st.number_input("裁剪阈值 C", 0.1, 10.0, float(config["clip_norm"]), step=0.1)
+                config["noise_multiplier"] = st.number_input("噪声倍率 sigma", 0.0, 5.0, float(config["noise_multiplier"]), step=0.1)
+                config["epsilon"] = st.number_input("隐私预算 epsilon", 0.1, 100.0, float(config["epsilon"]), step=0.1)
+                config["delta"] = st.number_input("松弛参数 delta", 1e-8, 1e-2, float(config["delta"]), format="%.8f")
+                config["seed"] = st.number_input("随机种子", 1, 9999, int(config["seed"]), step=1)
+    with summary:
+        with st.container(border=True):
+            st.markdown("#### 配置摘要")
+            st.metric("训练模式", config["data_mode"])
+            st.metric("客户端 / 轮数", f"{config['clients']} / {config['rounds']}")
+            st.metric("MLP", f"{config['hidden_layers']}x{config['hidden_units']}")
+            st.metric("DP epsilon", config["epsilon"])
+            with st.expander("完整配置", expanded=False):
+                st.json(config)
 
 
 def render_training_monitor() -> None:
@@ -929,30 +1295,55 @@ def render_training_monitor() -> None:
     frame = st.session_state.frame
     config = st.session_state.experiment_config
     valid = st.session_state.validation["status"] in {"通过", "已审核"}
-    scheme = st.selectbox("训练方案", ["全部方案", *SCHEME_LABELS.keys()], format_func=lambda key: "全部方案" if key == "全部方案" else SCHEME_LABELS[key])
-
-    if not valid:
-        st.warning("数据未通过校验，训练按钮暂不可用。")
-    if st.button("开始训练", type="primary", disabled=not valid):
-        modes = list(SCHEME_LABELS) if scheme == "全部方案" else [scheme]
-        progress = st.progress(0)
-        for index, mode in enumerate(modes, start=1):
-            with st.spinner(f"正在训练 {SCHEME_LABELS[mode]}"):
-                st.session_state.training_results[mode] = train_scheme(frame, mode, config)
-            progress.progress(index / len(modes))
-        st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已参与训练", config["target_column"])
-        st.session_state.report_markdown = generate_report(st.session_state.training_results, config)
-        st.success("训练完成")
+    control, overview = st.columns([1.35, 1])
+    with control:
+        with st.container(border=True):
+            st.markdown("#### 训练控制")
+            scheme = st.selectbox("训练方案", ["全部方案", *SCHEME_LABELS.keys()], format_func=lambda key: "全部方案" if key == "全部方案" else SCHEME_LABELS[key])
+            if not valid:
+                st.info("数据通过校验或审核后即可启动训练。请先到数据上传与审核页执行校验。")
+            if st.button("开始训练", type="primary", disabled=not valid, use_container_width=True):
+                modes = list(SCHEME_LABELS) if scheme == "全部方案" else [scheme]
+                progress = st.progress(0)
+                for index, mode in enumerate(modes, start=1):
+                    with st.spinner(f"正在训练 {SCHEME_LABELS[mode]}"):
+                        st.session_state.training_results[mode] = train_scheme(frame, mode, config)
+                    progress.progress(index / len(modes))
+                st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已参与训练", config["target_column"])
+                st.session_state.report_markdown = generate_report(st.session_state.training_results, config)
+                st.success("训练完成")
+    with overview:
+        metric_row(
+            [
+                ("数据状态", st.session_state.validation["status"], "训练前置条件"),
+                ("结果数", len(st.session_state.training_results), "已完成方案"),
+            ]
+        )
+        with st.container(border=True):
+            st.markdown("#### 任务与日志")
+            if st.session_state.training_results:
+                st.caption("最近一次训练已完成，结果表和 Loss 曲线已更新。")
+            else:
+                st.caption("暂无训练任务。启动训练后，这里会显示任务状态、日志摘要和指标入口。")
 
     if st.session_state.training_results:
-        st.subheader("训练结果")
-        st.dataframe(results_table(st.session_state.training_results, config), use_container_width=True)
-        st.subheader("Loss 曲线")
-        loss_rows = []
-        for mode, result in st.session_state.training_results.items():
-            for step, loss in enumerate(result["history"]["loss"], start=1):
-                loss_rows.append({"方案": SCHEME_LABELS[mode], "轮次": step, "Loss": loss})
-        st.plotly_chart(px.line(pd.DataFrame(loss_rows), x="轮次", y="Loss", color="方案", markers=True), use_container_width=True)
+        with st.container(border=True):
+            st.markdown("#### 训练结果")
+            st.dataframe(results_table(st.session_state.training_results, config), use_container_width=True, hide_index=True)
+        with st.container(border=True):
+            st.markdown("#### Loss 曲线")
+            loss_rows = []
+            for mode, result in st.session_state.training_results.items():
+                for step, loss in enumerate(result["history"]["loss"], start=1):
+                    loss_rows.append({"方案": SCHEME_LABELS[mode], "轮次": step, "Loss": loss})
+            st.plotly_chart(px.line(pd.DataFrame(loss_rows), x="轮次", y="Loss", color="方案", markers=True), use_container_width=True)
+    else:
+        placeholders = st.columns(3)
+        for column, title in zip(placeholders, ["任务队列", "运行日志", "指标快照"]):
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"#### {title}")
+                    st.caption("等待训练启动。")
 
 
 def render_result_analysis() -> None:
@@ -960,14 +1351,31 @@ def render_result_analysis() -> None:
     results = st.session_state.training_results
     config = st.session_state.experiment_config
     if not results:
-        st.warning("暂无训练结果。")
+        empty_state("暂无训练结果", "完成一次训练后，这里会展示方案对比、指标图表、混淆矩阵和隐私预算分析。", "◈")
+        cols = st.columns(3)
+        for column, title in zip(cols, ["指标卡片", "对比表格", "图表分析"]):
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"#### {title}")
+                    st.caption("等待训练结果生成。")
         return
 
-    st.subheader("三方案对比表")
     table = results_table(results, config)
-    st.dataframe(table, use_container_width=True)
+    first = table.iloc[0]
+    metric_row(
+        [
+            ("Accuracy", f"{float(first['Accuracy'] or 0):.3f}", str(first["方案"])),
+            ("F1-score", f"{float(first['F1-score'] or 0):.3f}", "首个可用方案"),
+            ("方案数", len(results), "已完成训练"),
+        ]
+    )
+    with st.container(border=True):
+        st.markdown("#### 三方案对比表")
+        st.dataframe(table, use_container_width=True, hide_index=True)
     metric_rows = table.melt(id_vars=["方案"], value_vars=["Accuracy", "Precision", "Recall", "F1-score", "AUC"], var_name="指标", value_name="数值")
-    st.plotly_chart(px.bar(metric_rows, x="方案", y="数值", color="指标", barmode="group"), use_container_width=True)
+    with st.container(border=True):
+        st.markdown("#### 指标对比")
+        st.plotly_chart(px.bar(metric_rows, x="方案", y="数值", color="指标", barmode="group"), use_container_width=True)
     if "dp_fedavg" in results:
         dp_metric = table[table["方案"] == SCHEME_LABELS["dp_fedavg"]]
         if not dp_metric.empty:
@@ -977,38 +1385,64 @@ def render_result_analysis() -> None:
                     {"epsilon": float(config["epsilon"]) * 1.5, "Accuracy": min(1.0, float(dp_metric.iloc[0]["Accuracy"] or 0) + 0.03), "F1-score": min(1.0, float(dp_metric.iloc[0]["F1-score"] or 0) + 0.03)},
                 ]
             )
-            st.subheader("隐私预算与性能示意")
-            st.plotly_chart(px.line(privacy, x="epsilon", y=["Accuracy", "F1-score"], markers=True), use_container_width=True)
+            with st.container(border=True):
+                st.markdown("#### 隐私预算与性能示意")
+                st.plotly_chart(px.line(privacy, x="epsilon", y=["Accuracy", "F1-score"], markers=True), use_container_width=True)
 
     tabs = st.tabs([SCHEME_LABELS[mode] for mode in results])
     for tab, (mode, result) in zip(tabs, results.items()):
         with tab:
-            st.subheader("混淆矩阵")
-            matrix = result.get("metrics", {}).get("confusion_matrix", [[0, 0], [0, 0]])
-            st.plotly_chart(ff.create_annotated_heatmap(z=matrix, colorscale="Blues", showscale=True), use_container_width=True)
-            st.subheader("客户端分布")
-            distribution = pd.DataFrame(result.get("client_distribution", []))
-            st.dataframe(distribution, use_container_width=True)
-            if not distribution.empty:
-                st.plotly_chart(px.bar(distribution, x="client", y="size"), use_container_width=True)
+            tab_cols = st.columns(2)
+            with tab_cols[0]:
+                with st.container(border=True):
+                    st.markdown("#### 混淆矩阵")
+                    matrix = result.get("metrics", {}).get("confusion_matrix", [[0, 0], [0, 0]])
+                    st.plotly_chart(ff.create_annotated_heatmap(z=matrix, colorscale="Blues", showscale=True), use_container_width=True)
+            with tab_cols[1]:
+                with st.container(border=True):
+                    st.markdown("#### 客户端分布")
+                    distribution = pd.DataFrame(result.get("client_distribution", []))
+                    st.dataframe(distribution, use_container_width=True, hide_index=True)
+                    if not distribution.empty:
+                        st.plotly_chart(px.bar(distribution, x="client", y="size"), use_container_width=True)
             if result.get("dp"):
-                st.subheader("DP 参数")
-                st.json({**result["dp"], "epsilon": config["epsilon"], "delta": config["delta"]})
+                with st.container(border=True):
+                    st.markdown("#### DP 参数")
+                    st.json({**result["dp"], "epsilon": config["epsilon"], "delta": config["delta"]})
 
 
 def render_report_export() -> None:
     st.title("报告导出页")
-    if st.button("生成 Markdown 报告"):
-        st.session_state.report_markdown = generate_report(
-            st.session_state.training_results,
-            st.session_state.experiment_config,
-        )
     markdown = st.session_state.report_markdown or generate_report(
         st.session_state.training_results,
         st.session_state.experiment_config,
     )
-    st.text_area("Markdown 报告内容", markdown, height=420)
-    st.download_button("下载 Markdown 报告", markdown, file_name="fedprivtab_report.md", mime="text/markdown")
+    generate_col, preview_col, download_col = st.columns([1, 1.45, 1])
+    with generate_col:
+        with st.container(border=True):
+            st.markdown("#### 生成报告")
+            st.caption("根据当前实验配置和训练结果生成 Markdown。")
+            if st.button("生成 Markdown 报告", type="primary", use_container_width=True):
+                st.session_state.report_markdown = generate_report(
+                    st.session_state.training_results,
+                    st.session_state.experiment_config,
+                )
+                st.rerun()
+            if not st.session_state.training_results:
+                st.info("暂无训练结果时会生成包含下一步提示的空报告。")
+    with preview_col:
+        with st.container(border=True):
+            st.markdown("#### 预览报告")
+            mode = st.radio("预览模式", ["Markdown 预览", "源码"], horizontal=True, label_visibility="collapsed")
+            if mode == "Markdown 预览":
+                st.markdown(markdown)
+            else:
+                st.text_area("Markdown 报告内容", markdown, height=420)
+    with download_col:
+        with st.container(border=True):
+            st.markdown("#### 下载")
+            st.caption("导出当前预览内容为 Markdown 文件。")
+            st.download_button("下载 Markdown 报告", markdown, file_name="fedprivtab_report.md", mime="text/markdown", use_container_width=True)
 
 
 def main() -> None:

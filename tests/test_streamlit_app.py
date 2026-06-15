@@ -32,3 +32,24 @@ def test_streamlit_app_helpers_are_importable() -> None:
     assert table.loc[0, "方案"] == "集中式 MLP"
     assert "FedPrivTab 实验报告" in report
     assert "集中式 MLP" in report
+
+
+def test_sidebar_and_client_cards_escape_html_values() -> None:
+    metric = streamlit_app.sidebar_metric_card("数据状态", "<b>通过</b>", "<script>")
+    clients = [
+        {
+            "id": "client-1",
+            "name": "<img src=x>",
+            "enabled": True,
+            "status": "<b>待校验</b>",
+            "rows": 10,
+            "features": 4,
+        }
+    ]
+    table = streamlit_app.client_table_html(clients)
+
+    assert "<b>通过</b>" not in metric
+    assert "&lt;b&gt;通过&lt;/b&gt;" in metric
+    assert "<script>" not in metric
+    assert "<img src=x>" not in table
+    assert "&lt;img src=x&gt;" in table
