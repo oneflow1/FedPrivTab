@@ -1,29 +1,268 @@
-# FedPrivTab Requirements
+# 差分隐私 Non-IID 表格数据联邦学习系统需求文档
 
-## Functional Requirements
+## 1. 项目概述
 
-1. Provide a Streamlit UI for FedPrivTab experimentation.
-2. Provide a Flask backend for health, sample data generation, validation, and training.
-3. Support a shared PyTorch MLP model across centralized, FedAvg, and DP-FedAvg training modes.
-4. Allow users to generate sample tabular data or upload their own CSV data.
-5. Validate input schema, target column presence, sample count, missing values, and basic data consistency.
-6. Support basic IID and Non-IID client partitioning for federated experiments.
-7. Show training metrics, curves, confusion matrix, and client distribution.
-8. Export a Markdown report summarizing the experiment.
+本系统用于实现 **Non-IID 表格数据场景下的联邦学习与差分隐私实验**。系统支持客户端数据上传、数据校验、联邦训练、差分隐私处理、实验结果对比和报告导出。
 
-## Non-Functional Requirements
+系统以 MLP 作为基础预测模型，比较三种训练方案：
 
-1. Keep the system lightweight and dependency-minimal.
-2. Use small default datasets and short training schedules for fast execution.
-3. Ensure the code runs without external data sources.
-4. Keep the implementation modular and testable.
-5. Make the outputs deterministic when a seed is supplied.
+| 方案 | 说明 | 作用 |
+|---|---|---|
+| 集中式 MLP | 将训练数据集中后统一训练 | 作为性能参考上限 |
+| FedAvg + MLP | 多客户端本地训练，服务器按样本量加权聚合 | 验证普通联邦学习效果 |
+| DP-FedAvg + MLP | 在 FedAvg 基础上对客户端更新裁剪并加噪 | 分析隐私保护与性能损失 |
 
-## Metrics
+说明：三种方案使用相同 MLP 结构，重点比较不同训练机制对模型性能、收敛效果和隐私保护的影响。
 
-- Accuracy
-- Precision
-- Recall
-- F1
-- Loss
-- AUC when the binary classification setting allows it
+## 2. 建设目标
+
+1. 支持客户端上传本地表格数据，并完成数据校验。
+2. 支持管理员管理客户端、数据状态和训练任务。
+3. 支持 IID / Non-IID 客户端数据配置与分布可视化。
+4. 实现集中式 MLP、FedAvg + MLP、DP-FedAvg + MLP 三种训练方案。
+5. 输出 Accuracy、Precision、Recall、F1-score、Loss 等评价指标。
+6. 生成实验结果表格、损失曲线、准确率曲线、混淆矩阵和项目报告。
+
+## 3. 用户角色
+
+| 角色 | 权限与职责 |
+|---|---|
+| 系统管理员 | 管理客户端、审核数据、配置训练任务、查看实验结果 |
+| 客户端用户 | 上传本地表格数据，查看数据校验结果和训练参与状态 |
+| 实验研究人员 | 配置实验参数，运行训练任务，分析模型表现和隐私权衡 |
+
+## 4. 核心流程
+
+```text
+客户端注册 / 管理员创建客户端
+  ↓
+客户端上传本地表格数据
+  ↓
+系统校验字段、标签列、缺失率和样本数量
+  ↓
+管理员审核并启用客户端数据
+  ↓
+配置 MLP、Non-IID、FedAvg 和差分隐私参数
+  ↓
+运行集中式 MLP / FedAvg + MLP / DP-FedAvg + MLP
+  ↓
+生成指标表格、训练曲线、混淆矩阵和结论分析
+  ↓
+导出项目报告
+```
+
+## 5. 功能需求
+
+### 5.1 客户端与数据管理
+
+系统支持两种数据来源：
+
+| 数据来源 | 说明 |
+|---|---|
+| 客户端上传数据 | 每个客户端上传本地 CSV / Excel 数据，模拟真实联邦学习参与方 |
+| 集中数据模拟划分 | 管理员上传完整数据，系统切分为多个虚拟客户端，用于实验对比 |
+
+客户端上传数据时，系统记录：
+
+| 字段 | 说明 |
+|---|---|
+| 客户端 ID | 唯一标识客户端 |
+| 客户端名称 | 展示数据来源 |
+| 上传文件 | CSV / Excel 文件 |
+| 标签列 | 预测目标字段 |
+| 样本数量 | 当前客户端数据行数 |
+| 特征数量 | 当前客户端特征列数 |
+| 数据状态 | 待校验、校验通过、校验失败、已参与训练 |
+
+系统需要校验：
+
+- 文件格式是否正确；
+- 标签列是否存在；
+- 各客户端特征列是否一致；
+- 缺失率是否超过阈值；
+- 样本数量是否满足训练要求；
+- 标签类别是否符合分类任务要求。
+
+### 5.2 数据预处理与分析
+
+| 功能 | 说明 |
+|---|---|
+| 缺失值处理 | 支持删除、均值填充、中位数填充、众数填充 |
+| 特征编码 | 支持类别变量编码和标签编码 |
+| 数值标准化 | 支持 StandardScaler 或 MinMaxScaler |
+| 统计描述 | 展示样本数、特征数、缺失率、均值、标准差、类别分布 |
+| 数据可视化 | 展示标签分布、特征分布、相关性热力图 |
+
+### 5.3 Non-IID 配置
+
+系统支持 IID 和 Non-IID 两种客户端数据模式。Non-IID 推荐使用 Dirichlet 分布构造：
+
+$$
+p_k \sim \mathrm{Dirichlet}(\alpha)
+$$
+
+其中，$\alpha$ 用于控制客户端数据异质性：
+
+- $\alpha$ 越大，客户端数据越接近 IID；
+- $\alpha$ 越小，客户端数据差异越明显。
+
+系统需要展示每个客户端的样本数量、标签分布和数据差异。
+
+### 5.4 模型训练
+
+#### 5.4.1 集中式 MLP
+
+集中式 MLP 使用全部训练数据统一训练，作为性能参考上限。
+
+$$
+\min_w \mathcal{L}(w)=\frac{1}{N}\sum_{i=1}^{N}\ell(f_w(x_i),y_i)
+$$
+
+#### 5.4.2 FedAvg + MLP
+
+FedAvg 中，每个客户端使用本地数据训练 MLP，服务器按样本量加权聚合：
+
+$$
+w_{t+1}=\sum_{k=1}^{K}\frac{n_k}{\sum_{j=1}^{K}n_j}w_{t+1}^{(k)}
+$$
+
+其中，$n_k$ 表示第 $k$ 个客户端的样本数量。
+
+#### 5.4.3 DP-FedAvg + MLP
+
+DP-FedAvg 在客户端上传模型更新前进行裁剪和加噪：
+
+$$
+\bar{\Delta}_k=\Delta_k\cdot\min\left(1,\frac{C}{\|\Delta_k\|_2}\right)
+$$
+
+$$
+\tilde{\Delta}_k=\bar{\Delta}_k+\mathcal{N}(0,\sigma^2C^2I)
+$$
+
+服务器聚合处理后的客户端更新：
+
+$$
+w_{t+1}=w_t+\sum_{k=1}^{K}\frac{n_k}{\sum_{j=1}^{K}n_j}\tilde{\Delta}_k
+$$
+
+差分隐私满足：
+
+$$
+\Pr[\mathcal{M}(D)\in S]\le e^{\epsilon}\Pr[\mathcal{M}(D')\in S]+\delta
+$$
+
+## 6. 参数配置
+
+| 参数类别 | 参数 |
+|---|---|
+| MLP 参数 | 隐藏层数量、隐藏层神经元数、激活函数、学习率、Batch Size、Epoch |
+| 联邦参数 | 客户端数量、通信轮数、本地 Epoch、客户端采样比例、聚合方式 |
+| Non-IID 参数 | 数据模式、Dirichlet 参数 $\alpha$、随机种子 |
+| 差分隐私参数 | 裁剪阈值 $C$、噪声倍率 $\sigma$、隐私预算 $\epsilon$、松弛参数 $\delta$ |
+
+## 7. 结果输出
+
+### 7.1 指标
+
+| 指标 | 说明 |
+|---|---|
+| Accuracy | 分类准确率 |
+| Precision | 精确率 |
+| Recall | 召回率 |
+| F1-score | 综合分类表现 |
+| Loss | 模型损失 |
+| AUC | 二分类使用 AUC，多分类可选 Macro-AUC |
+| $\epsilon$ | DP-FedAvg 的隐私预算 |
+
+### 7.2 实验结果表格
+
+| 方案 | 数据方式 | 是否联邦 | 是否差分隐私 | $\epsilon$ | Accuracy | Precision | Recall | F1-score | AUC | Final Loss |
+|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 集中式 MLP | 全量集中训练 | 否 | 否 | - | - | - | - | - | - | - |
+| FedAvg + MLP | 多客户端 Non-IID 数据 | 是 | 否 | - | - | - | - | - | - | - |
+| DP-FedAvg + MLP | 多客户端 Non-IID 数据 | 是 | 是 | - | - | - | - | - | - | - |
+
+### 7.3 图表
+
+系统需要生成：
+
+- 客户端标签分布图；
+- 训练损失曲线；
+- 测试准确率曲线；
+- 混淆矩阵；
+- 隐私预算与模型性能关系图。
+
+## 8. 页面设计
+
+| 页面 | 功能 |
+|---|---|
+| 首页 | 展示客户端数量、数据状态、训练任务和实验概览 |
+| 客户端管理页 | 注册客户端、启用/禁用客户端、查看客户端状态 |
+| 数据上传与审核页 | 上传 CSV / Excel，选择标签列，完成数据校验和审核 |
+| 数据分析页 | 展示统计描述、标签分布、特征分布和相关性热力图 |
+| 实验配置页 | 配置 MLP、IID / Non-IID、FedAvg 和差分隐私参数 |
+| 训练监控页 | 启动训练任务，展示训练进度、客户端参与情况和指标曲线 |
+| 结果分析页 | 展示实验表格、曲线图、混淆矩阵和结论分析 |
+| 报告导出页 | 导出 Markdown、PDF 或 Word 项目报告 |
+
+## 9. 非功能需求
+
+| 需求 | 说明 |
+|---|---|
+| 可复现性 | 支持随机种子和固定实验配置 |
+| 可配置性 | 支持模型、联邦、Non-IID 和差分隐私参数配置 |
+| 可解释性 | 展示数学公式、实验指标和结论分析 |
+| 易用性 | 页面流程清晰，适合课程项目演示 |
+| 可扩展性 | 后续可扩展更多模型、数据集和隐私机制 |
+| 可导出性 | 支持导出图表、结果表格和完整报告 |
+
+## 10. 推荐技术方案
+
+| 模块 | 技术 |
+|---|---|
+| 前端界面 | Streamlit |
+| 模型训练 | PyTorch |
+| 数据处理 | Pandas、NumPy、scikit-learn |
+| 图表绘制 | Matplotlib、Seaborn、Plotly |
+| 联邦学习 | 自定义 FedAvg 模拟器 |
+| 差分隐私 | 自定义裁剪与高斯噪声机制，或 Opacus |
+| 报告导出 | Markdown + LaTeX |
+
+## 11. 实现优先级
+
+### 第一阶段：数据与页面基础
+
+1. 实现首页、客户端管理页和数据上传与审核页。
+2. 实现客户端注册、启用/禁用和状态管理。
+3. 实现 CSV / Excel 上传、字段校验和数据预处理。
+4. 实现数据统计描述和基础可视化。
+
+### 第二阶段：模型训练
+
+1. 实现集中式 MLP 训练。
+2. 实现客户端本地训练。
+3. 实现 FedAvg 聚合。
+4. 实现 IID / Non-IID 数据划分和客户端分布可视化。
+
+### 第三阶段：差分隐私与报告
+
+1. 实现客户端更新裁剪。
+2. 实现高斯噪声添加。
+3. 实现 DP-FedAvg + MLP。
+4. 生成实验结果表格、曲线图和混淆矩阵。
+5. 生成结论分析和项目报告。
+
+## 12. 验收标准
+
+系统完成后应满足：
+
+1. 支持客户端注册、启用、禁用和状态查看。
+2. 支持客户端上传本地 CSV / Excel 数据。
+3. 支持上传数据的字段、标签列、缺失率和样本数量校验。
+4. 支持 IID / Non-IID 客户端数据配置和分布展示。
+5. 支持集中式 MLP、FedAvg + MLP、DP-FedAvg + MLP 三种训练方案。
+6. 支持输出 Accuracy、Precision、Recall、F1-score、Loss 和可选 AUC。
+7. 支持生成实验结果表格、损失曲线、准确率曲线和混淆矩阵。
+8. 报告中包含 MLP、FedAvg、DP-FedAvg 和差分隐私的 LaTeX 数学公式。
+9. 结论能够解释集中式训练、普通联邦训练和差分隐私联邦训练之间的性能差异。

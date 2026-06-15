@@ -4,7 +4,7 @@ FedPrivTab is a minimal end-to-end federated learning system for tabular data ex
 
 ## Features
 
-- Streamlit front end for uploading or generating example tabular data
+- Streamlit multi-page front end for client management, data review, analysis, experiment configuration, training monitoring, result analysis, and report export
 - Flask back end with health, data validation, sample generation, and training endpoints
 - PyTorch MLP training for centralized, FedAvg, and DP-FedAvg workflows
 - Basic test coverage for data utilities and training pipelines
@@ -30,6 +30,21 @@ Run the Streamlit app:
 ```bash
 streamlit run streamlit_app.py
 ```
+
+## Streamlit pages
+
+The Streamlit UI is organized into the eight sections described in `docs/requirements.md`:
+
+- 首页: experiment overview, client counts, data validation state, and completed training schemes
+- 客户端管理页: add clients, enable or disable clients, and inspect client status
+- 数据上传与审核页: upload CSV data, generate sample data, select the label column, and validate data
+- 数据分析页: statistical summaries, label distribution, feature means and distributions, and correlation heatmap
+- 实验配置页: configure MLP, IID / Non-IID, FedAvg, and differential privacy parameters
+- 训练监控页: run `centralized`, `fedavg`, `dp_fedavg`, or all schemes and compare loss curves
+- 结果分析页: compare scheme metrics, confusion matrices, client distributions, and DP parameters
+- 报告导出页: generate and download a Markdown experiment report
+
+The sidebar includes a role selector for 系统管理员, 客户端用户, and 实验研究人员. The app stores clients, uploaded or generated data, validation state, experiment configuration, training results, and report content in `st.session_state`.
 
 Run tests:
 
