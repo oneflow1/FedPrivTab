@@ -7,6 +7,8 @@ This project can run as two systemd services on an Ubuntu server:
 
 The examples use `/opt/fedprivtab` and a dedicated `fedprivtab` user. Adjust paths and users if your server layout differs.
 
+Authentication state is stored in SQLite. By default the database is `/opt/fedprivtab/fedprivtab_auth.sqlite3` when services run from the project directory. Set `FEDPRIVTAB_AUTH_DB=/var/lib/fedprivtab/auth.sqlite3` in both systemd units if you want the database outside the application directory.
+
 ## 1. Prepare the application
 
 ```bash
@@ -47,6 +49,14 @@ Open `http://SERVER_IP:8501` for the Streamlit UI. If the server has a firewall,
 sudo ufw allow 8501/tcp
 ```
 
+Default demo accounts are created only when the users table is empty:
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `admin` | `admin123` | 系统管理员 |
+| `client` | `client123` | 客户端用户 |
+| `researcher` | `research123` | 实验研究人员 |
+
 ## 4. Update deployment
 
 After copying a new version to `/opt/fedprivtab`, reinstall changed Python dependencies if needed and restart:
@@ -57,4 +67,4 @@ sudo -u fedprivtab .venv/bin/pip install -r requirements.txt
 sudo systemctl restart fedprivtab-api fedprivtab-streamlit
 ```
 
-No external secrets are required by the default demo configuration.
+No external secrets are required by the default demo configuration. Passwords are stored as salted PBKDF2 hashes, not plaintext.

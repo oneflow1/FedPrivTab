@@ -6,6 +6,7 @@ FedPrivTab is a minimal end-to-end federated learning system for tabular data ex
 
 - Streamlit multi-page front end for client management, data review, analysis, experiment configuration, training monitoring, result analysis, and report export
 - Flask back end with health, data validation, sample generation, and training endpoints
+- Local SQLite login/session/audit persistence with demo role accounts
 - PyTorch MLP training for centralized, FedAvg, and DP-FedAvg workflows
 - Preprocessing helpers for missing values, categorical encoding, and numeric scaling
 - Basic test coverage for data utilities and training pipelines
@@ -32,6 +33,16 @@ Run the Streamlit app:
 streamlit run streamlit_app.py
 ```
 
+On first run the app creates `fedprivtab_auth.sqlite3` in the project directory unless `FEDPRIVTAB_AUTH_DB` is set.
+
+Default demo accounts:
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| `admin` | `admin123` | 系统管理员 |
+| `client` | `client123` | 客户端用户 |
+| `researcher` | `research123` | 实验研究人员 |
+
 ## Streamlit pages
 
 The Streamlit UI is organized into the eight sections described in `docs/requirements.md`:
@@ -45,7 +56,7 @@ The Streamlit UI is organized into the eight sections described in `docs/require
 - 结果分析页: compare scheme metrics, confusion matrices, client distributions, and DP parameters
 - 报告导出页: generate and download a Markdown experiment report
 
-The sidebar includes a role selector for 系统管理员, 客户端用户, and 实验研究人员. The app stores clients, uploaded or generated data, validation state, experiment configuration, training results, and report content in `st.session_state`.
+The top bar includes login/logout controls. Users must log in before accessing pages; the authenticated role controls which of the eight pages are visible. The app stores clients, uploaded or generated data, validation state, experiment configuration, training results, and report content in `st.session_state`, while users, sessions, and login/logout audit events are stored in SQLite.
 
 Run tests:
 
@@ -60,6 +71,9 @@ Systemd unit examples live in `deploy/systemd/`, and the step-by-step Ubuntu dep
 ## API
 
 - `GET /health` – health check
+- `POST /auth/login` – authenticate with `username` and `password`
+- `POST /auth/logout` – close a session by JSON `session_id` or `X-Session-Id`
+- `GET /auth/status` – inspect a session by query `session_id` or `X-Session-Id`
 - `GET /sample-data` – generate a sample dataset
 - `POST /validate` – validate uploaded or generated tabular data
 - `POST /train` – run centralized, FedAvg, or DP-FedAvg training

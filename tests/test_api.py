@@ -44,3 +44,33 @@ def test_health_validate_train_and_report_endpoints() -> None:
         report = client.post("/report", data=json.dumps({"result": body}), content_type="application/json")
         assert report.status_code == 200
         assert "FedPrivTab 实验报告" in report.get_json()["markdown"]
+
+
+def test_auth_endpoints() -> None:
+    client = app.test_client()
+
+    denied = client.post("/auth/login", data=json.dumps({"username": "admin", "password": "wrong"}), content_type="application/json")
+    assert denied.status_code == 401
+
+    login = client.post(
+        "/auth/login",
+        data=json.dumps({"username": "admin", "password": "admin123"}),
+        content_type="application/json",
+    )
+    assert login.status_code == 200
+    body = login.get_json()
+    assert body["username"] == "admin"
+    assert body["role"] == "系统管理员"
+    assert body["session_id"]
+
+    status = client.get(f"/auth/status?session_id={body['session_id']}")
+    assert status.status_code == 200
+    assert status.get_json()["authenticated"] is True
+
+    logout = client.post("/auth/logout", data=json.dumps({"session_id": body["session_id"]}), content_type="application/json")
+    assert logout.status_code == 200
+    assert logout.get_json()["logged_out"] is True
+
+    status = client.get(f"/auth/status?session_id={body['session_id']}")
+    assert status.status_code == 200
+    assert status.get_json()["authenticated"] is False

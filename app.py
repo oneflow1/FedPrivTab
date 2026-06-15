@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 from flask import Flask, jsonify, request
 
+import auth_db
 from data_utils import generate_sample_data, train_test_data, validate_tabular_data
 from training import TrainConfig, train_model
 
@@ -60,6 +61,43 @@ app = Flask(__name__)
 @app.get("/health")
 def health() -> tuple[dict[str, str], int]:
     return {"status": "ok"}, 200
+
+
+@app.post("/auth/login")
+def auth_login() -> tuple[dict[str, Any], int]:
+    payload = request.get_json(force=True)
+    username = str(payload.get("username", ""))
+    password = str(payload.get("password", ""))
+    session = auth_db.login(username, password)
+    if not session:
+        return {"error": "用户名或密码错误"}, 401
+    return {
+        "session_id": session["session_id"],
+        "username": session["username"],
+        "role": session["role"],
+    }, 200
+
+
+@app.post("/auth/logout")
+def auth_logout() -> tuple[dict[str, Any], int]:
+    payload = request.get_json(silent=True) or {}
+    session_id = payload.get("session_id") or request.headers.get("X-Session-Id")
+    logged_out = auth_db.logout(str(session_id) if session_id else None)
+    return {"logged_out": logged_out}, 200
+
+
+@app.get("/auth/status")
+def auth_status() -> tuple[dict[str, Any], int]:
+    session_id = request.args.get("session_id") or request.headers.get("X-Session-Id")
+    session = auth_db.get_session(session_id)
+    if not session:
+        return {"authenticated": False}, 200
+    return {
+        "authenticated": True,
+        "username": session["username"],
+        "role": session["role"],
+        "session_id": session["session_id"],
+    }, 200
 
 
 @app.get("/sample-data")

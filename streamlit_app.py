@@ -8,6 +8,7 @@ import plotly.express as px
 import plotly.figure_factory as ff
 import streamlit as st
 
+import auth_db
 from app import build_markdown_report
 from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
 from training import TrainConfig, train_model
@@ -29,6 +30,12 @@ PAGES = [
     "结果分析页",
     "报告导出页",
 ]
+
+ROLE_PAGES = {
+    "系统管理员": PAGES,
+    "客户端用户": ["首页", "客户端管理页", "数据上传与审核页", "数据分析页", "报告导出页"],
+    "实验研究人员": ["首页", "数据分析页", "实验配置页", "训练监控页", "结果分析页", "报告导出页"],
+}
 
 SCHEME_LABELS = {
     "centralized": "集中式 MLP",
@@ -80,6 +87,7 @@ def default_experiment_config() -> dict[str, Any]:
 
 
 def initialize_state() -> None:
+    auth_db.init_db()
     if "clients" not in st.session_state:
         st.session_state.clients = default_clients()
     if "frame" not in st.session_state:
@@ -92,6 +100,20 @@ def initialize_state() -> None:
         st.session_state.training_results = {}
     if "report_markdown" not in st.session_state:
         st.session_state.report_markdown = ""
+    if "auth_session_id" not in st.session_state:
+        st.session_state.auth_session_id = None
+    if "auth_user" not in st.session_state:
+        st.session_state.auth_user = None
+    session = auth_db.get_session(st.session_state.auth_session_id)
+    if session:
+        st.session_state.auth_user = {
+            "username": session["username"],
+            "role": session["role"],
+            "session_id": session["session_id"],
+        }
+    else:
+        st.session_state.auth_session_id = None
+        st.session_state.auth_user = None
 
 
 def validation_status(frame: pd.DataFrame | None, target_column: str) -> dict[str, Any]:
@@ -236,12 +258,66 @@ def numeric_frame(frame: pd.DataFrame, target_column: str) -> pd.DataFrame:
     return frame[columns]
 
 
+def current_user() -> dict[str, Any] | None:
+    user = st.session_state.get("auth_user")
+    return dict(user) if user else None
+
+
+def allowed_pages(role: str) -> list[str]:
+    return ROLE_PAGES.get(role, ["首页"])
+
+
+def render_top_bar() -> None:
+    left, right = st.columns([3, 2])
+    user = current_user()
+    with left:
+        st.title("FedPrivTab")
+        if user:
+            st.caption(f"当前用户: {user['username']} | 角色: {user['role']}")
+        else:
+            st.caption("请登录后访问系统页面")
+    with right:
+        if user:
+            st.write("")
+            st.write("")
+            cols = st.columns([2, 1])
+            cols[0].success(f"已登录: {user['username']}")
+            if cols[1].button("退出登录", use_container_width=True):
+                auth_db.logout(user["session_id"])
+                st.session_state.auth_session_id = None
+                st.session_state.auth_user = None
+                st.rerun()
+        else:
+            with st.form("login-form"):
+                username = st.text_input("用户名")
+                password = st.text_input("密码", type="password")
+                submitted = st.form_submit_button("登录", use_container_width=True)
+            if submitted:
+                session = auth_db.login(username, password)
+                if session:
+                    st.session_state.auth_session_id = session["session_id"]
+                    st.session_state.auth_user = {
+                        "username": session["username"],
+                        "role": session["role"],
+                        "session_id": session["session_id"],
+                    }
+                    st.rerun()
+                else:
+                    st.error("用户名或密码错误")
+
+
+def render_login_required() -> None:
+    st.info("请使用右上角登录入口登录后继续。")
+
+
 def render_sidebar() -> str:
+    user = current_user()
+    role = user["role"] if user else ""
+    pages = allowed_pages(role)
     with st.sidebar:
         st.header("FedPrivTab")
-        role = st.selectbox("当前角色", list(ROLE_HINTS))
-        st.info(ROLE_HINTS[role])
-        page = st.radio("页面", PAGES)
+        st.info(ROLE_HINTS.get(role, "请先登录。"))
+        page = st.radio("页面", pages)
         st.divider()
         status = st.session_state.validation["status"]
         st.metric("客户端", len(st.session_state.clients))
@@ -251,7 +327,7 @@ def render_sidebar() -> str:
 
 
 def render_home() -> None:
-    st.title("FedPrivTab")
+    st.subheader("首页")
     st.caption("差分隐私 Non-IID 表格数据联邦学习实验系统")
     clients = pd.DataFrame(st.session_state.clients)
     enabled = int(clients["enabled"].sum()) if not clients.empty else 0
@@ -540,6 +616,10 @@ def render_report_export() -> None:
 def main() -> None:
     st.set_page_config(page_title="FedPrivTab", layout="wide")
     initialize_state()
+    render_top_bar()
+    if not current_user():
+        render_login_required()
+        return
     page = render_sidebar()
     if page == "首页":
         render_home()
