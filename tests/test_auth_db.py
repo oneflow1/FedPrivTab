@@ -44,3 +44,17 @@ def test_failed_login_records_audit_event(tmp_path) -> None:
     assert events[0]["event_type"] == "login"
     assert events[0]["username"] == "researcher"
     assert events[0]["success"] == 0
+
+
+def test_change_password_and_delete_user(tmp_path) -> None:
+    db_path = tmp_path / "auth.sqlite3"
+    created = auth_db.create_user("client-x", "first-pass", auth_db.CLIENT_ROLE, db_path)
+    assert created["username"] == "client-x"
+
+    assert auth_db.change_password("client-x", "wrong", "second-pass", db_path) is False
+    assert auth_db.change_password("client-x", "first-pass", "second-pass", db_path) is True
+    assert auth_db.login("client-x", "first-pass", db_path) is None
+    assert auth_db.login("client-x", "second-pass", db_path) is not None
+
+    assert auth_db.delete_user("client-x", db_path) is True
+    assert auth_db.login("client-x", "second-pass", db_path) is None

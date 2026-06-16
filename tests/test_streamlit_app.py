@@ -53,6 +53,8 @@ def test_streamlit_app_helpers_are_importable() -> None:
     assert "Final Accuracy" in table.columns
     assert set(history.columns) == {"方案", "轮次", "Loss", "Accuracy"}
     assert privacy.loc[0, "noise_multiplier"] == 0.2
+    assert streamlit_app.preprocess_scope_label("centralized") == "管理员集中式 MLP 数据"
+    assert streamlit_app.preprocess_scope_label("federated") == "客户端分布式 MLP 数据"
     assert "FedPrivTab 实验报告" in report
     assert "集中式 MLP" in report
     assert "FedAvg" in report

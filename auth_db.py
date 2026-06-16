@@ -192,6 +192,35 @@ def set_user_active(username: str, active: bool, path: str | Path | None = None)
     return cursor.rowcount > 0
 
 
+def delete_user(username: str, path: str | Path | None = None) -> bool:
+    username = username.strip()
+    init_db(path)
+    with connect(path) as connection:
+        user = connection.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if not user:
+            return False
+        connection.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        cursor = connection.execute("DELETE FROM users WHERE username = ?", (username,))
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def change_password(username: str, old_password: str | None, new_password: str, path: str | Path | None = None) -> bool:
+    username = username.strip()
+    if not new_password:
+        raise ValueError("新密码不能为空")
+    user = get_user(username, path)
+    if not user:
+        return False
+    if old_password is not None and not verify_password(old_password, user["salt"], user["password_hash"]):
+        return False
+    salt, password_hash = hash_password(new_password)
+    with connect(path) as connection:
+        connection.execute("UPDATE users SET salt = ?, password_hash = ? WHERE username = ?", (salt, password_hash, username))
+        connection.commit()
+    return True
+
+
 def authenticate(username: str, password: str, path: str | Path | None = None) -> dict[str, Any] | None:
     username = username.strip()
     user = get_user(username, path)

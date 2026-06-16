@@ -71,19 +71,18 @@ function fail(name, evidence) {
   const results = [];
   await login(page, 'researcher', 'research123');
   const researcherHome = await page.locator('body').innerText();
-  const managerPages = ['首页', '客户端管理页', '数据上传与审核页', '数据分析页', '实验配置页', '训练监控页', '结果分析页', '报告导出页'];
+  const managerPages = ['首页', '客户端管理页', '数据预处理页', '数据分析页', '实验训练页', '结果分析页'];
   const managerMissing = managerPages.filter(text => !researcherHome.includes(text));
-  results.push(managerMissing.length === 0 ? pass('研究员可访问全部管理页面', managerPages.join(', ')) : fail('研究员可访问全部管理页面', `缺少: ${managerMissing.join(', ')}`));
+  results.push(managerMissing.length === 0 ? pass('研究员可访问新导航页面', managerPages.join(', ')) : fail('研究员可访问新导航页面', `缺少: ${managerMissing.join(', ')}`));
+  results.push(!researcherHome.includes('数据状态') ? pass('Workspace Status 精简', '只展示客户端和训练结果') : fail('Workspace Status 精简', '仍展示数据状态'));
 
   const pageRequirements = {
     '首页': ['客户端', '实验概览', '集中式 MLP', 'FedAvg + MLP', 'DP-FedAvg + MLP'],
-    '客户端管理页': ['创建客户端账号', '客户端清单', '启用'],
-    '数据上传与审核页': ['一键数据预处理', '上传 CSV 数据', '一键预处理并校验', '审核通过并启用数据', '审核驳回', '数据预览'],
+    '客户端管理页': ['创建客户端账号', '客户端账号清单', '修改我的密码', '删除账号'],
+    '数据预处理页': ['文件上传', '目标变量', '缺失值处理方式', '选择要标准化的数值列', '一键处理并保存版本', '处理版本记录'],
     '数据分析页': ['统计摘要', '标签分布', '客户端标签分布', '相关性热力图'],
-    '实验配置页': ['Non-IID', 'alpha', '裁剪阈值 C', '噪声倍率 sigma', '64,32'],
-    '训练监控页': ['训练控制', '全部方案', '开始训练', '数据状态'],
-    '结果分析页': ['暂无训练结果', '训练监控页'],
-    '报告导出页': ['生成 Markdown 报告', '下载 Markdown 报告', 'FedPrivTab 实验报告'],
+    '实验训练页': ['实验参数配置', '勾选训练方案', '集中式 MLP 数据版本', 'FedAvg / DP-FedAvg 数据版本', '开始训练'],
+    '结果分析页': ['结果分析页', '报告导出'],
   };
 
   const screenshots = {};
@@ -100,14 +99,14 @@ function fail(name, evidence) {
   await page.context().clearCookies();
   await login(page, 'client', 'client123');
   const clientHome = await page.locator('body').innerText();
-  results.push(!clientHome.includes('客户端管理页') && !clientHome.includes('实验配置页') && !clientHome.includes('训练监控页')
-    ? pass('客户端用户隐藏管理/训练入口', '未显示客户端管理、实验配置、训练监控入口')
+  results.push(!clientHome.includes('客户端管理页') && !clientHome.includes('实验训练页')
+    ? pass('客户端用户隐藏管理/训练入口', '未显示客户端管理、实验训练入口')
     : fail('客户端用户隐藏管理/训练入口', '仍显示管理或训练入口'));
-  await clickNav(page, '数据上传与审核页');
+  await clickNav(page, '数据预处理页');
   const clientUpload = await page.locator('body').innerText();
-  results.push(!clientUpload.includes('审核通过并启用数据') || clientUpload.includes('disabled')
-    ? pass('客户端用户不能审核数据', '客户端视图未开放审核动作')
-    : fail('客户端用户不能审核数据', '客户端视图仍可见审核动作'));
+  results.push(clientUpload.includes('客户端分布式 MLP 数据')
+    ? pass('客户端预处理用途正确', '客户端处理数据用于分布式 MLP')
+    : fail('客户端预处理用途正确', '未显示客户端分布式处理用途'));
 
   const summary = { url: baseUrl, timestamp: new Date().toISOString(), consoleMessages, screenshots, results };
   fs.writeFileSync(path.join(outDir, 'ui-full-verification.json'), JSON.stringify(summary, null, 2));
