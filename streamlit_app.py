@@ -885,15 +885,15 @@ def render_brand(compact: bool = False) -> None:
 
 
 def sidebar_metric_card(label: str, value: Any, icon: str) -> str:
-    return f"""
-    <div class="fed-sidebar-metric">
-        <div class="fed-sidebar-metric-icon">{escape(str(icon))}</div>
-        <div>
-            <div class="fed-sidebar-metric-label">{escape(str(label))}</div>
-            <div class="fed-sidebar-metric-value">{escape(str(value))}</div>
-        </div>
-    </div>
-    """
+    return (
+        '<div class="fed-sidebar-metric">'
+        f'<div class="fed-sidebar-metric-icon">{escape(str(icon))}</div>'
+        '<div>'
+        f'<div class="fed-sidebar-metric-label">{escape(str(label))}</div>'
+        f'<div class="fed-sidebar-metric-value">{escape(str(value))}</div>'
+        '</div>'
+        '</div>'
+    )
 
 
 def current_user() -> dict[str, Any] | None:
