@@ -71,15 +71,15 @@ function fail(name, evidence) {
   const results = [];
   await login(page, 'researcher', 'research123');
   const researcherHome = await page.locator('body').innerText();
-  const managerPages = ['首页', '客户端管理页', '数据预处理页', '数据分析页', '实验训练页', '结果分析页'];
+  const managerPages = ['首页', '客户端管理页', '数据分析页', '数据预处理页', '实验训练页', '结果分析页'];
   results.push(pass('研究员可访问新导航页面', managerPages.join(', ')));
   results.push(!researcherHome.includes('数据状态') ? pass('Workspace Status 精简', '只展示客户端和训练结果') : fail('Workspace Status 精简', '仍展示数据状态'));
 
   const pageRequirements = {
     '首页': ['客户端', '实验概览', '集中式 MLP', 'FedAvg + MLP', 'DP-FedAvg + MLP'],
-    '客户端管理页': ['固定 4 个客户端账号', '客户端账号清单', '修改客户端密码', '修改我的密码'],
-    '数据预处理页': ['文件上传', '目标变量', '缺失值处理方式', '选择要标准化的数值列', '一键处理并保存版本', '处理版本记录'],
-    '数据分析页': ['统计摘要', '标签分布', '客户端标签分布', '相关性热力图'],
+    '客户端管理页': ['客户端账号', '客户端账号清单', '修改密码'],
+    '数据预处理页': ['文件上传', '上传 CSV 数据', '目标变量', '缺失值摘要和处理方式', '数值标准化', '一键处理并保存版本', '处理版本记录'],
+    '数据分析页': ['上传用于数据分析的 CSV 文件', '统计摘要', '字段分布', '选择字段查看分布', '特征均值', '相关性热力图'],
     '实验训练页': ['实验参数配置', '勾选训练方案', '集中式 MLP 数据版本', 'FedAvg / DP-FedAvg 数据版本', '开始训练'],
     '结果分析页': ['结果分析页', '报告导出'],
   };

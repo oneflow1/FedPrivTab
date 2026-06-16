@@ -25,8 +25,8 @@ ROLE_HINTS = {
 PAGES = [
     "首页",
     "客户端管理页",
-    "数据预处理页",
     "数据分析页",
+    "数据预处理页",
     "实验训练页",
     "结果分析页",
 ]
@@ -174,6 +174,52 @@ def missing_summary(frame: pd.DataFrame) -> pd.DataFrame:
     summary.columns = ["column", "missing"]
     summary["missing_rate"] = summary["missing"] / max(len(frame), 1)
     return summary[summary["missing"] > 0].sort_values("missing", ascending=False)
+
+
+def recommended_missing_strategy(frame: pd.DataFrame, column: str) -> str:
+    missing_rate = float(frame[column].isna().mean()) if column in frame.columns else 0.0
+    if missing_rate > 0.4:
+        return "drop"
+    return "median" if pd.api.types.is_numeric_dtype(frame[column]) else "mode"
+
+
+def recommended_scaler(frame: pd.DataFrame, column: str) -> str:
+    if column not in frame.columns or not pd.api.types.is_numeric_dtype(frame[column]):
+        return "none"
+    series = frame[column].dropna()
+    if series.empty or series.nunique() <= 2:
+        return "none"
+    return "minmax" if float(series.skew()) > 1.0 else "standard"
+
+
+def apply_column_preprocessing(
+    frame: pd.DataFrame,
+    target_column: str,
+    missing_strategies: dict[str, str],
+    scaler_strategies: dict[str, str],
+) -> pd.DataFrame:
+    processed = frame.copy()
+    drop_columns = [column for column, strategy in missing_strategies.items() if strategy == "drop" and column in processed.columns]
+    if drop_columns:
+        processed = processed.dropna(subset=drop_columns).reset_index(drop=True)
+    for column, strategy in missing_strategies.items():
+        if column not in processed.columns or strategy == "drop" or processed[column].isna().sum() == 0:
+            continue
+        if strategy == "mean" and pd.api.types.is_numeric_dtype(processed[column]):
+            value = processed[column].mean()
+        elif strategy == "median" and pd.api.types.is_numeric_dtype(processed[column]):
+            value = processed[column].median()
+        else:
+            mode = processed[column].mode(dropna=True)
+            value = mode.iloc[0] if not mode.empty else 0
+        processed[column] = processed[column].fillna(value)
+    processed = preprocess_tabular_data(processed, target_column=target_column, missing_strategy="mode", scaler="none")
+    for column, strategy in scaler_strategies.items():
+        if strategy == "none" or column not in processed.columns or not pd.api.types.is_numeric_dtype(processed[column]):
+            continue
+        scaler = StandardScaler() if strategy == "standard" else MinMaxScaler()
+        processed[[column]] = scaler.fit_transform(processed[[column]])
+    return processed
 
 
 def preprocess_scope() -> str:
@@ -1180,52 +1226,35 @@ def render_home() -> None:
 
 def render_client_management() -> None:
     st.title("客户端管理页")
-    user = current_user()
     if not is_manager():
         st.error("权限不足：客户端用户不能管理其他客户端账号。")
         return
 
     users = [item for item in auth_db.list_users(role=auth_db.CLIENT_ROLE) if item["username"] in {"client-1", "client-2", "client-3", "client-4"}]
-    st.caption("系统固定 4 个客户端账号，不支持新增或删除客户端；本页仅支持修改/重置客户端密码。")
-    metric_row(
-        [
-            ("客户端账号", len(users), "固定 4 个客户端"),
-            ("本地客户端", len(st.session_state.clients), "实验客户端清单"),
-            ("训练结果", len(st.session_state.training_results), "已完成方案"),
-        ]
-    )
-
-    st.markdown("#### 客户端账号清单")
-    rows = [{"用户名": item["username"], "角色": item["role"], "创建时间": item["created_at"], "最近登录": item.get("last_login_at") or "-"} for item in users]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-    st.markdown("#### 修改客户端密码")
-    for item in users:
-        with st.expander(f"修改密码 · {item['username']}", expanded=False):
-            new_password = st.text_input("新密码", type="password", key=f"reset-{item['username']}", placeholder="输入该客户端的新密码")
-            if st.button("保存新密码", key=f"save-pass-{item['username']}"):
-                try:
-                    if auth_db.change_password(item["username"], None, new_password):
-                        st.success("密码已更新")
-                    else:
-                        st.error("账号不存在")
-                except ValueError as exc:
-                    st.error(str(exc))
+    st.caption("系统固定 4 个客户端账号，不支持新增或删除客户端；账号清单内可直接修改每个客户端密码。")
+    metric_row([("客户端账号", len(users), "固定 4 个客户端")])
 
     with st.container(border=True):
-        st.markdown("#### 修改我的密码")
-        with st.form("change-own-password", clear_on_submit=True):
-            old_password = st.text_input("当前密码", type="password")
-            new_password = st.text_input("新密码", type="password")
-            submitted = st.form_submit_button("更新我的密码")
-        if submitted and user:
-            try:
-                if auth_db.change_password(user["username"], old_password, new_password):
-                    st.success("你的密码已更新")
-                else:
-                    st.error("当前密码错误")
-            except ValueError as exc:
-                st.error(str(exc))
+        st.markdown("#### 客户端账号清单")
+        st.caption("每行右侧提供修改密码操作；保存时会显示处理状态、成功或失败提示。")
+        header = st.columns([1.2, 1.2, 1.3, 1.4, 1.1])
+        for column, label in zip(header, ["用户名", "角色", "最近登录", "新密码", "操作"]):
+            column.markdown(f"**{label}**")
+        for item in users:
+            row = st.columns([1.2, 1.2, 1.3, 1.4, 1.1])
+            row[0].write(item["username"])
+            row[1].write(item["role"])
+            row[2].write(item.get("last_login_at") or "-")
+            new_password = row[3].text_input("新密码", type="password", key=f"reset-{item['username']}", label_visibility="collapsed", placeholder="输入新密码")
+            if row[4].button("修改密码", key=f"save-pass-{item['username']}", use_container_width=True):
+                with st.spinner(f"正在更新 {item['username']} 的密码"):
+                    try:
+                        if auth_db.change_password(item["username"], None, new_password):
+                            st.success(f"{item['username']} 密码已更新")
+                        else:
+                            st.error("账号不存在")
+                    except ValueError as exc:
+                        st.error(str(exc))
 
 
 def render_data_upload() -> None:
@@ -1236,83 +1265,92 @@ def render_data_upload() -> None:
     frame = st.session_state.frame if is_manager() else visible_frame_for_user(st.session_state.frame)
 
     st.caption(f"当前角色的数据处理用途：{scope_label}。一键处理后会保存为训练可选的数据版本。")
-    metric_row(
-        [
-            ("处理用途", scope_label, "由当前登录角色决定"),
-            ("原始样本", len(frame) if frame is not None else 0, "上传或示例数据"),
-            ("版本数", len(version_options(scope)), "当前用途可用版本"),
-        ]
-    )
+    metric_row([
+        ("处理用途", scope_label, "由当前登录角色决定"),
+        ("原始样本", len(frame) if frame is not None else 0, "上传 CSV 数据"),
+        ("版本数", len(version_options(scope)), "当前用途可用版本"),
+    ])
 
     with st.container(border=True):
         st.markdown("#### 1. 文件上传")
         uploaded = st.file_uploader("上传 CSV 数据", type=["csv"])
         if uploaded is not None:
-            st.session_state.frame = pd.read_csv(uploaded)
-            st.session_state.validation = {"status": "待处理", "message": "文件已上传，请选择目标变量并一键处理", "details": {}}
+            with st.spinner("正在解析并刷新数据区域..."):
+                st.session_state.frame = pd.read_csv(uploaded)
+                st.session_state.uploaded_file_info = {"name": uploaded.name, "size": uploaded.size}
+                st.session_state.validation = {"status": "待处理", "message": "文件已上传，请选择目标变量并一键处理", "details": {}}
+            st.success(f"已上传：{uploaded.name}（{uploaded.size} bytes）")
             st.rerun()
-        with st.expander("没有 CSV？生成示例数据", expanded=False):
-            samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
-            features = st.number_input("示例特征数", min_value=2, max_value=50, value=int(config["features"]), step=1)
-            clients = st.number_input("示例客户端数", min_value=2, max_value=20, value=int(config["clients"]), step=1)
-            if st.button("生成示例数据", use_container_width=True):
-                config.update({"samples": int(samples), "features": int(features), "clients": int(clients)})
-                st.session_state.frame = generate_sample_data(samples=int(samples), features=int(features), clients=int(clients), seed=int(config["seed"]))
-                st.session_state.clients = default_clients(int(clients))
-                st.session_state.validation = {"status": "待处理", "message": "示例数据已生成，请一键处理", "details": {}}
-                st.rerun()
+        info = st.session_state.get("uploaded_file_info")
+        if info:
+            st.info(f"当前上传文件：{info['name']}（{info['size']} bytes），切换页面后会保留。")
+        else:
+            st.warning("请上传 CSV 文件后进行预处理。")
 
     frame = st.session_state.frame if is_manager() else visible_frame_for_user(st.session_state.frame)
     if frame is None or frame.empty:
-        empty_state("等待数据", "上传 CSV 或生成示例数据后即可进行预处理。", "⇪")
+        empty_state("等待数据", "上传 CSV 后即可进行目标变量、缺失值和标准化处理。", "⇪")
         return
 
     columns = list(frame.columns)
     numeric_columns = [column for column in frame.select_dtypes(include=np.number).columns if column != "client_id"]
     target_default = columns.index(config["target_column"]) if config["target_column"] in columns else 0
 
-    config_col, summary_col = st.columns([1.1, 1.3])
+    config_col, summary_col = st.columns([1.15, 1.25])
     with config_col:
         with st.container(border=True):
             st.markdown("#### 2. 目标变量选择")
             config["target_column"] = st.selectbox("目标变量", columns, index=target_default)
             st.markdown("#### 3. 缺失值摘要和处理方式")
             missing = missing_summary(frame)
+            missing_strategies: dict[str, str] = {}
             if missing.empty:
                 st.success("当前数据没有缺失值")
             else:
-                st.dataframe(missing, use_container_width=True, hide_index=True)
-            config["missing_strategy"] = st.selectbox(
-                "缺失值处理方式",
-                ["drop", "mean", "median", "mode"],
-                index=["drop", "mean", "median", "mode"].index(config.get("missing_strategy", "drop")),
-                format_func={"drop": "删除缺失行", "mean": "均值填充", "median": "中位数填充", "mode": "众数填充"}.get,
-            )
+                for item in missing.to_dict(orient="records"):
+                    column = item["column"]
+                    recommended = recommended_missing_strategy(frame, column)
+                    options = ["drop", "mean", "median", "mode"]
+                    selected = st.selectbox(
+                        f"{column} · 缺失 {item['missing']} · {item['missing_rate']:.2%} · 推荐 {recommended}",
+                        options,
+                        index=options.index(recommended),
+                        key=f"missing-strategy-{column}",
+                        format_func={"drop": "删除含缺失行", "mean": "均值填充", "median": "中位数填充", "mode": "众数填充"}.get,
+                    )
+                    missing_strategies[column] = selected
             st.markdown("#### 4. 数值标准化")
+            scaler_strategies: dict[str, str] = {}
             scale_candidates = [column for column in numeric_columns if column != config["target_column"]]
-            columns_to_scale = st.multiselect("选择要标准化的数值列", scale_candidates, default=scale_candidates)
-            config["scaler"] = st.selectbox(
-                "标准化方式",
-                ["standard", "minmax", "none"],
-                index=["standard", "minmax", "none"].index(config.get("scaler", "standard")),
-                format_func={"standard": "StandardScaler", "minmax": "MinMaxScaler", "none": "不标准化"}.get,
-            )
+            if not scale_candidates:
+                st.info("没有可标准化的数值列。")
+            for column in scale_candidates:
+                recommended = recommended_scaler(frame, column)
+                options = ["none", "standard", "minmax"]
+                selected = st.selectbox(
+                    f"{column} · 推荐 {recommended}",
+                    options,
+                    index=options.index(recommended),
+                    key=f"scaler-strategy-{column}",
+                    format_func={"none": "不处理", "standard": "StandardScaler", "minmax": "MinMaxScaler"}.get,
+                )
+                scaler_strategies[column] = selected
             if st.button("一键处理并保存版本", type="primary", use_container_width=True):
-                processed = preprocess_tabular_data(frame, target_column=config["target_column"], missing_strategy=config["missing_strategy"], scaler="none")
-                if config["scaler"] != "none" and columns_to_scale:
-                    scaler_cls = StandardScaler if config["scaler"] == "standard" else MinMaxScaler
-                    existing = [column for column in columns_to_scale if column in processed.columns and pd.api.types.is_numeric_dtype(processed[column])]
-                    if existing:
-                        processed[existing] = scaler_cls().fit_transform(processed[existing])
-                validation = validation_status(processed, config["target_column"])
-                st.session_state.frame = processed
-                st.session_state.validation = validation
-                if validation["status"] == "通过":
-                    version = add_preprocess_version(processed, config["target_column"], scope, config, columns_to_scale)
-                    st.success(f"已保存处理版本：{version['id']}")
-                else:
-                    st.error(validation["message"])
-                st.session_state.clients = sync_clients_with_frame(st.session_state.clients, processed, validation["status"], config["target_column"])
+                with st.spinner("正在处理数据并保存版本..."):
+                    try:
+                        processed = apply_column_preprocessing(frame, config["target_column"], missing_strategies, scaler_strategies)
+                        validation = validation_status(processed, config["target_column"])
+                        st.session_state.frame = processed
+                        st.session_state.validation = validation
+                        if validation["status"] == "通过":
+                            scaled_columns = [column for column, strategy in scaler_strategies.items() if strategy != "none"]
+                            version = add_preprocess_version(processed, config["target_column"], scope, {**config, "missing_strategy": "按列处理", "scaler": "按列处理"}, scaled_columns)
+                            st.session_state.clients = sync_clients_with_frame(st.session_state.clients, processed, validation["status"], config["target_column"])
+                            st.success(f"处理完成，已保存版本：{version['id']}")
+                        else:
+                            st.error(validation["message"])
+                    except Exception as exc:
+                        st.error(f"处理失败：{exc}")
                 st.rerun()
 
     with summary_col:
@@ -1331,61 +1369,85 @@ def render_data_upload() -> None:
 
 def render_data_analysis() -> None:
     st.title("数据分析页")
-    frame = visible_frame_for_user(st.session_state.frame)
-    target = st.session_state.experiment_config["target_column"]
+    st.caption("数据分析页是独立功能，可单独上传指定 CSV 文件进行统计和图表分析。")
+    uploaded = st.file_uploader("上传用于数据分析的 CSV 文件", type=["csv"], key="analysis-upload")
+    if uploaded is not None:
+        with st.spinner("正在解析分析文件并刷新图表..."):
+            st.session_state.analysis_frame = pd.read_csv(uploaded)
+            st.session_state.analysis_file_info = {"name": uploaded.name, "size": uploaded.size}
+        st.success(f"已载入分析文件：{uploaded.name}")
+        st.rerun()
+
+    frame = st.session_state.get("analysis_frame")
     if frame is None or frame.empty:
-        empty_state("暂无可分析数据", "请先上传或生成数据，并完成必要的预处理。", "◌")
+        frame = visible_frame_for_user(st.session_state.frame)
+    info = st.session_state.get("analysis_file_info")
+    if info:
+        st.info(f"当前分析文件：{info['name']}（{info['size']} bytes）")
+    if frame is None or frame.empty:
+        empty_state("暂无可分析数据", "请在本页上传 CSV 文件，或先在数据预处理页准备数据。", "◌")
         return
 
+    target = st.session_state.experiment_config.get("target_column", "target")
+    if target not in frame.columns:
+        target = frame.columns[-1]
     numeric = numeric_frame(frame, target)
     missing = int(frame.isna().sum().sum())
-    metric_row(
-        [
-            ("样本", len(frame), "当前数据行数"),
-            ("字段", len(frame.columns), "包含标签与客户端列"),
-            ("数值特征", len(numeric.columns), "用于建模分析"),
-            ("缺失值", missing, "全表缺失单元格"),
-        ]
-    )
+    metric_row([
+        ("样本", len(frame), "当前数据行数"),
+        ("字段", len(frame.columns), "完整字段数"),
+        ("数值特征", len(numeric.columns), "用于均值/热力图"),
+        ("缺失值", missing, "全表缺失单元格"),
+    ])
 
     with st.container(border=True):
         st.markdown("#### 统计摘要")
-        st.caption("按字段查看基础统计，便于快速识别异常范围、类别列和缺失风险。")
+        st.caption("包含上传文件中的全部字段；非数值字段会在相关性图中说明并自动排除。")
         st.dataframe(frame.describe(include="all").transpose(), use_container_width=True)
 
-    distribution = client_distribution_frame(frame, target)
     chart_cols = st.columns(2)
     with chart_cols[0]:
         with st.container(border=True):
-            st.markdown("#### 标签分布")
-            st.caption("检查分类均衡性，避免训练指标被单一标签主导。")
-            if target in frame.columns:
-                st.plotly_chart(px.histogram(frame, x=target, color=target), use_container_width=True)
+            st.markdown("#### 字段分布")
+            distribution_feature = st.selectbox("选择字段查看分布", list(frame.columns), index=list(frame.columns).index(target) if target in frame.columns else 0)
+            st.plotly_chart(px.histogram(frame, x=distribution_feature, color=target if target in frame.columns and target != distribution_feature else None), use_container_width=True)
     with chart_cols[1]:
         with st.container(border=True):
             st.markdown("#### 特征均值")
-            st.caption("比较数值特征中心位置，辅助判断标准化是否生效。")
-            means = numeric.mean().reset_index()
-            means.columns = ["feature", "mean"]
-            st.plotly_chart(px.bar(means, x="feature", y="mean"), use_container_width=True)
+            if numeric.empty:
+                st.info("没有可用于均值图的数值特征。")
+            else:
+                st.caption(f"展示全部 {len(numeric.columns)} 个数值特征：{', '.join(map(str, numeric.columns))}")
+                means = numeric.mean().reset_index()
+                means.columns = ["feature", "mean"]
+                fig = px.bar(means, x="feature", y="mean")
+                fig.update_layout(xaxis_tickangle=-35)
+                st.plotly_chart(fig, use_container_width=True)
 
-    if not distribution.empty:
-        with st.container(border=True):
-            st.markdown("#### 客户端标签分布")
-            st.caption("展示各客户端的标签构成，用于观察 IID / Non-IID 差异。")
-            st.plotly_chart(px.bar(distribution, x="client_id", y="samples", color="label", barmode="group"), use_container_width=True)
+    if "client_id" in frame.columns and target in frame.columns:
+        distribution = client_distribution_frame(frame, target)
+        if not distribution.empty:
+            with st.container(border=True):
+                st.markdown("#### 客户端标签分布")
+                st.caption("展示各客户端的标签构成，用于观察 IID / Non-IID 差异。")
+                st.plotly_chart(px.bar(distribution, x="client_id", y="samples", color="label", barmode="group"), use_container_width=True)
 
     if not numeric.empty:
         detail_cols = st.columns(2)
         with detail_cols[0]:
             with st.container(border=True):
                 st.markdown("#### 单特征分布")
-                feature = st.selectbox("特征", numeric.columns)
-                st.plotly_chart(px.histogram(frame, x=feature, color=target if target in frame.columns else None), use_container_width=True)
+                st.caption("下拉框包含全部可分析字段。")
+                feature = st.selectbox("特征", list(frame.columns), key="single-feature-distribution")
+                st.plotly_chart(px.histogram(frame, x=feature, color=target if target in frame.columns and target != feature else None), use_container_width=True)
         with detail_cols[1]:
             with st.container(border=True):
                 st.markdown("#### 相关性热力图")
-                st.caption("用于发现高度相关特征，避免冗余输入影响模型解释。")
+                excluded = [column for column in frame.columns if column not in numeric.columns and column not in {target, "client_id"}]
+                if excluded:
+                    st.caption(f"热力图仅包含全部数值特征；非数值字段未纳入：{', '.join(map(str, excluded[:12]))}")
+                else:
+                    st.caption("热力图包含全部可用数值特征。")
                 corr = numeric.corr()
                 st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="RdBu_r"), use_container_width=True)
 

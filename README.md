@@ -48,9 +48,9 @@ Default demo accounts:
 The Streamlit UI is organized into six workflow pages:
 
 - 首页: experiment overview, client counts, preprocessing status, and completed training schemes
-- 客户端管理页: manage the fixed four client accounts and update/reset passwords; client creation and deletion are intentionally disabled
-- 数据预处理页: upload CSV data, select the target variable, review missing-value summaries, choose missing-value handling, scale selected numeric columns, and save processed data versions
-- 数据分析页: statistical summaries, label distribution, client label distribution, feature means and distributions, and correlation heatmap
+- 客户端管理页: manage the fixed four client accounts and update/reset passwords inline from the account list; client creation, deletion, and self-password changes are intentionally disabled
+- 数据分析页: independently upload a CSV file, then inspect full-field summaries, selectable field distributions, numeric feature means, and correlation heatmaps
+- 数据预处理页: upload CSV data, keep uploaded-file state across page switches, select the target variable, configure per-column missing-value handling and numeric scaling recommendations, and save processed data versions
 - 实验训练页: configure MLP/FedAvg/DP parameters, select training schemes, and choose preprocessing versions for training; centralized MLP only uses administrator-created versions, while FedAvg and DP-FedAvg only use client-created versions
 - 结果分析页: compare metrics, curves, confusion matrices, client distributions, DP parameters, and generate/download the Markdown report
 
