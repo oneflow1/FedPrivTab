@@ -5,7 +5,7 @@ This project can run as two systemd services on an Ubuntu server:
 - `fedprivtab-api.service`: Flask API on port `5000`
 - `fedprivtab-streamlit.service`: Streamlit UI on port `8501`
 
-The examples use `/opt/fedprivtab` and a dedicated `fedprivtab` user. Adjust paths and users if your server layout differs.
+The examples use `/opt/fedprivtab` and a dedicated `fedprivtab` user. Adjust paths and users if your server layout differs. Streamlit usage statistics are disabled in `.streamlit/config.toml` and the systemd unit to prevent external telemetry/webhook requests from blocking upload workflows.
 
 Authentication state is stored in SQLite. By default the database is `/opt/fedprivtab/fedprivtab_auth.sqlite3` when services run from the project directory. Set `FEDPRIVTAB_AUTH_DB=/var/lib/fedprivtab/auth.sqlite3` in both systemd units if you want the database outside the application directory.
 
