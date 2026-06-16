@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 
 from app import app
 
@@ -63,6 +64,20 @@ def test_health_validate_train_and_report_endpoints() -> None:
     assert column_body["validation"]["valid"] is True
     assert column_body["recommendations"]["missing_strategies"]["numeric_text"] == "median"
     assert "records" in column_body
+
+    csv_bytes = "feature_0,feature_1,target,client_id\n1,2,0,0\n,3,1,1\n4,5,0,0\n6,7,1,1\n8,9,0,0\n10,11,1,1\n12,13,0,0\n14,15,1,1\n16,17,0,0\n18,19,1,1\n20,21,0,0\n22,23,1,1\n24,25,0,0\n26,27,1,1\n28,29,0,0\n30,31,1,1\n32,33,0,0\n34,35,1,1\n36,37,0,0\n38,39,1,1\n".encode()
+    multipart = client.post(
+        "/preprocess",
+        data={
+            "file": (BytesIO(csv_bytes), "sample.csv"),
+            "target_column": "target",
+            "missing_strategies": json.dumps({"feature_0": "median"}),
+            "scaler_strategies": json.dumps({"feature_0": "standard"}),
+        },
+        content_type="multipart/form-data",
+    )
+    assert multipart.status_code == 200
+    assert multipart.get_json()["validation"]["valid"] is True
 
     for mode in ["centralized", "fedavg", "dp_fedavg"]:
         payload = {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+import json
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -222,15 +223,24 @@ def validate() -> tuple[dict[str, Any], int]:
 
 @app.post("/preprocess")
 def preprocess() -> tuple[dict[str, Any], int]:
-    payload = request.get_json(force=True)
-    frame = pd.DataFrame(payload.get("records", []))
-    target_column = payload.get("target_column", "target")
+    if request.files.get("file"):
+        file = request.files["file"]
+        frame = pd.read_csv(file)
+        target_column = request.form.get("target_column", "target")
+        missing_strategies = json.loads(request.form.get("missing_strategies", "{}"))
+        scaler_strategies = json.loads(request.form.get("scaler_strategies", "{}"))
+    else:
+        payload = request.get_json(force=True)
+        frame = pd.DataFrame(payload.get("records", []))
+        target_column = payload.get("target_column", "target")
+        missing_strategies = payload.get("missing_strategies") or None
+        scaler_strategies = payload.get("scaler_strategies") or None
     if frame.empty:
         return {"error": "数据为空"}, 400
     try:
         recommendations = preprocessing_recommendations(frame, target_column=target_column)
-        missing_strategies = payload.get("missing_strategies") or recommendations["missing_strategies"]
-        scaler_strategies = payload.get("scaler_strategies") or recommendations["scaler_strategies"]
+        missing_strategies = missing_strategies or recommendations["missing_strategies"]
+        scaler_strategies = scaler_strategies or recommendations["scaler_strategies"]
         processed = apply_column_preprocessing(
             frame,
             target_column=target_column,

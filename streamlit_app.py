@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from html import escape
+from io import BytesIO
 from typing import Any
+import json
 
 import numpy as np
 import pandas as pd
@@ -150,14 +152,28 @@ def backend_preprocess(
     target_column: str,
     missing_strategies: dict[str, str],
     scaler_strategies: dict[str, str],
+    file_bytes: bytes | None = None,
+    filename: str = "data.csv",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    payload = {
-        "records": dataframe_records(frame),
-        "target_column": target_column,
-        "missing_strategies": missing_strategies,
-        "scaler_strategies": scaler_strategies,
-    }
-    response = requests.post(f"{API_BASE_URL}/preprocess", json=payload, timeout=120)
+    if file_bytes:
+        response = requests.post(
+            f"{API_BASE_URL}/preprocess",
+            data={
+                "target_column": target_column,
+                "missing_strategies": json.dumps(missing_strategies),
+                "scaler_strategies": json.dumps(scaler_strategies),
+            },
+            files={"file": (filename, file_bytes, "text/csv")},
+            timeout=180,
+        )
+    else:
+        payload = {
+            "records": dataframe_records(frame),
+            "target_column": target_column,
+            "missing_strategies": missing_strategies,
+            "scaler_strategies": scaler_strategies,
+        }
+        response = requests.post(f"{API_BASE_URL}/preprocess", json=payload, timeout=120)
     response.raise_for_status()
     body = response.json()
     return pd.DataFrame(body.get("records", [])), body.get("validation", {})
@@ -416,6 +432,12 @@ def numeric_frame(frame: pd.DataFrame, target_column: str) -> pd.DataFrame:
     excluded = {target_column, "client_id"}
     columns = [column for column in frame.select_dtypes(include=np.number).columns if column not in excluded]
     return frame[columns]
+
+
+def chart_sample(frame: pd.DataFrame, max_rows: int = 5000) -> pd.DataFrame:
+    if len(frame) <= max_rows:
+        return frame
+    return frame.sample(max_rows, random_state=42).reset_index(drop=True)
 
 
 def inject_global_styles() -> None:
@@ -1268,8 +1290,11 @@ def render_data_upload() -> None:
         st.markdown("#### 1. 文件上传")
         uploaded = st.file_uploader("上传 CSV 数据", type=["csv"])
         if uploaded is not None:
-            with st.spinner("正在解析并刷新数据区域..."):
-                st.session_state.frame = pd.read_csv(uploaded)
+            with st.spinner("正在一次性读取 CSV 文件并刷新数据区域..."):
+                file_bytes = uploaded.getvalue()
+                st.session_state.uploaded_file_bytes = file_bytes
+                st.session_state.uploaded_file_name = uploaded.name
+                st.session_state.frame = pd.read_csv(BytesIO(file_bytes))
                 st.session_state.uploaded_file_info = {"name": uploaded.name, "size": uploaded.size}
                 st.session_state.validation = {"status": "待处理", "message": "文件已上传，请选择目标变量并一键处理", "details": {}}
                 st.session_state.preprocessing_refresh_notice = f"已解析 {uploaded.name}，正在刷新目标变量、缺失值摘要和标准化配置。"
@@ -1333,7 +1358,14 @@ def render_data_upload() -> None:
                 with st.spinner("正在处理数据并保存版本..."):
                     try:
                         try:
-                            processed, backend_validation = backend_preprocess(frame, config["target_column"], missing_strategies, scaler_strategies)
+                            processed, backend_validation = backend_preprocess(
+                                frame,
+                                config["target_column"],
+                                missing_strategies,
+                                scaler_strategies,
+                                file_bytes=st.session_state.get("uploaded_file_bytes"),
+                                filename=st.session_state.get("uploaded_file_name", "data.csv"),
+                            )
                             validation = {
                                 "status": "通过" if backend_validation.get("valid") else "失败",
                                 "message": backend_validation.get("message", "后端预处理完成"),
@@ -1378,8 +1410,10 @@ def render_data_analysis() -> None:
         st.info(f"刷新完成：{analysis_notice}")
     uploaded = st.file_uploader("上传用于数据分析的 CSV 文件", type=["csv"], key="analysis-upload")
     if uploaded is not None:
-        with st.spinner("正在解析分析文件并刷新图表..."):
-            st.session_state.analysis_frame = pd.read_csv(uploaded)
+        with st.spinner("正在一次性读取分析文件并刷新图表..."):
+            analysis_bytes = uploaded.getvalue()
+            st.session_state.analysis_file_bytes = analysis_bytes
+            st.session_state.analysis_frame = pd.read_csv(BytesIO(analysis_bytes))
             st.session_state.analysis_file_info = {"name": uploaded.name, "size": uploaded.size}
             st.session_state.analysis_refresh_notice = f"已解析 {uploaded.name}，正在刷新统计摘要和图表。"
         st.success(f"已载入分析文件：{uploaded.name}")
@@ -1412,12 +1446,16 @@ def render_data_analysis() -> None:
         st.caption("包含上传文件中的全部字段；非数值字段会在相关性图中说明并自动排除。")
         st.dataframe(frame.describe(include="all").transpose(), use_container_width=True)
 
+    analysis_chart_frame = chart_sample(frame)
+    if len(analysis_chart_frame) < len(frame):
+        st.info(f"图表已从 {len(frame)} 行中采样 {len(analysis_chart_frame)} 行渲染，统计摘要仍基于完整数据。")
+
     chart_cols = st.columns(2)
     with chart_cols[0]:
         with st.container(border=True):
             st.markdown("#### 字段分布")
             distribution_feature = st.selectbox("选择字段查看分布", list(frame.columns), index=list(frame.columns).index(target) if target in frame.columns else 0)
-            st.plotly_chart(px.histogram(frame, x=distribution_feature, color=target if target in frame.columns and target != distribution_feature else None), use_container_width=True)
+            st.plotly_chart(px.histogram(analysis_chart_frame, x=distribution_feature, color=target if target in analysis_chart_frame.columns and target != distribution_feature else None), use_container_width=True)
     with chart_cols[1]:
         with st.container(border=True):
             st.markdown("#### 特征均值")
@@ -1446,7 +1484,7 @@ def render_data_analysis() -> None:
                 st.markdown("#### 单特征分布")
                 st.caption("下拉框包含全部可分析字段。")
                 feature = st.selectbox("特征", list(frame.columns), key="single-feature-distribution")
-                st.plotly_chart(px.histogram(frame, x=feature, color=target if target in frame.columns and target != feature else None), use_container_width=True)
+                st.plotly_chart(px.histogram(analysis_chart_frame, x=feature, color=target if target in analysis_chart_frame.columns and target != feature else None), use_container_width=True)
         with detail_cols[1]:
             with st.container(border=True):
                 st.markdown("#### 相关性热力图")

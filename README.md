@@ -50,7 +50,7 @@ The Streamlit UI is organized into six workflow pages:
 - 首页: experiment overview, client counts, preprocessing status, and completed training schemes
 - 客户端管理页: manage the fixed four client accounts and update/reset passwords inline from the account list; client creation, deletion, and self-password changes are intentionally disabled
 - 数据分析页: independently upload a CSV file, then inspect full-field summaries, selectable field distributions, numeric feature means, and correlation heatmaps
-- 数据预处理页: upload CSV data with refresh feedback, keep uploaded-file state across page switches, select the target variable, configure per-column missing-value handling and numeric scaling recommendations, and save processed data versions through the backend preprocessing API
+- 数据预处理页: upload CSV data with refresh feedback, keep uploaded-file state across page switches, select the target variable, configure per-column missing-value handling and numeric scaling recommendations, and save processed data versions through the backend multipart file preprocessing API
 - 实验训练页: configure MLP/FedAvg/DP parameters, select training schemes, and choose preprocessing versions for training; centralized MLP only uses administrator-created versions, while FedAvg and DP-FedAvg only use client-created versions
 - 结果分析页: compare metrics, curves, confusion matrices, client distributions, DP parameters, and generate/download the Markdown report
 
@@ -78,7 +78,7 @@ Systemd unit examples live in `deploy/systemd/`, and the step-by-step Ubuntu dep
 - The Streamlit client management page supports password changes/resets for the fixed four client accounts (`client-1` to `client-4`)
 - `GET /sample-data` – generate a sample dataset
 - `POST /validate` – validate uploaded or generated tabular data
-- `POST /preprocess` – run backend per-column missing-value handling and numeric scaling, returning processed records and validation details
+- `POST /preprocess` – run backend per-column missing-value handling and numeric scaling from JSON records or a multipart CSV file, returning processed records and validation details
 - `POST /train` – run centralized, FedAvg, or DP-FedAvg training
 - `POST /report` – convert a training result payload into a Markdown report
 
