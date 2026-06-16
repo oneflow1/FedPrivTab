@@ -187,13 +187,17 @@ def results_table(results: dict[str, dict[str, Any]], config: dict[str, Any]) ->
                 "数据方式": "全量集中训练" if mode == "centralized" else f"多客户端 {config['data_mode']} 数据",
                 "是否联邦": "否" if mode == "centralized" else "是",
                 "是否差分隐私": "是" if mode == "dp_fedavg" else "否",
-                "epsilon": config["epsilon"] if mode == "dp_fedavg" else "-",
+                "epsilon": result.get("dp", {}).get("epsilon", config["epsilon"]) if mode == "dp_fedavg" else "-",
+                "delta": result.get("dp", {}).get("delta", config["delta"]) if mode == "dp_fedavg" else "-",
+                "clip_norm": result.get("dp", {}).get("clip_norm", config["clip_norm"]) if mode == "dp_fedavg" else "-",
+                "noise_multiplier": result.get("dp", {}).get("noise_multiplier", config["noise_multiplier"]) if mode == "dp_fedavg" else "-",
                 "Accuracy": metrics.get("accuracy"),
                 "Precision": metrics.get("precision"),
                 "Recall": metrics.get("recall"),
                 "F1-score": metrics.get("f1"),
                 "AUC": metrics.get("auc"),
                 "Final Loss": (result.get("history", {}).get("loss") or [None])[-1],
+                "Final Accuracy": (result.get("history", {}).get("accuracy") or [None])[-1],
             }
         )
     return pd.DataFrame(rows)
@@ -212,8 +216,9 @@ def dataframe_to_markdown(frame: pd.DataFrame) -> str:
 
 def generate_report(results: dict[str, dict[str, Any]], config: dict[str, Any]) -> str:
     if not results:
-        return "# FedPrivTab 实验报告\n\n尚未生成训练结果。"
+        return "# FedPrivTab 实验报告\n\n尚未生成训练结果。请先完成 CSV 数据校验，并在训练监控页启动训练。"
 
+    dp_table = privacy_performance_table(results, config)
     lines = [
         "# FedPrivTab 实验报告",
         "",
@@ -225,14 +230,64 @@ def generate_report(results: dict[str, dict[str, Any]], config: dict[str, Any]) 
         f"- 联邦聚合: {config['aggregation']}",
         f"- DP 参数: C={config['clip_norm']}, sigma={config['noise_multiplier']}, epsilon={config['epsilon']}, delta={config['delta']}",
         "",
+        "## 方法说明",
+        "",
+        "- MLP: 表格特征输入多层感知机，通过隐藏层非线性映射输出二分类 logit。",
+        "- FedAvg: 客户端本地训练后上传模型更新，服务端按样本量加权平均。",
+        "- DP-FedAvg: 对客户端更新执行 L2 裁剪并加入高斯噪声，以 $(\\epsilon, \\delta)$-DP 描述隐私预算。",
+        "- 差分隐私公式: $\\bar{g}_k = g_k \\cdot \\min(1, C / \\|g_k\\|_2)$，$\\tilde{g} = \\frac{1}{K}\\sum_k \\bar{g}_k + \\mathcal{N}(0, \\sigma^2 C^2 I)$。",
+        "",
         "## 方案结果",
         "",
         dataframe_to_markdown(results_table(results, config)),
+        "",
+        "## 隐私-性能对比",
+        "",
+        dataframe_to_markdown(dp_table) if not dp_table.empty else "暂无 DP-FedAvg 结果。",
         "",
     ]
     for result in results.values():
         lines.extend([build_markdown_report(result), ""])
     return "\n".join(lines)
+
+
+def history_frame(results: dict[str, dict[str, Any]]) -> pd.DataFrame:
+    rows = []
+    for mode, result in results.items():
+        history = result.get("history", {})
+        losses = history.get("loss") or []
+        accuracies = history.get("accuracy") or []
+        for step in range(max(len(losses), len(accuracies))):
+            rows.append(
+                {
+                    "方案": SCHEME_LABELS.get(mode, mode),
+                    "轮次": step + 1,
+                    "Loss": losses[step] if step < len(losses) else None,
+                    "Accuracy": accuracies[step] if step < len(accuracies) else None,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def privacy_performance_table(results: dict[str, dict[str, Any]], config: dict[str, Any]) -> pd.DataFrame:
+    rows = []
+    for mode, result in results.items():
+        if mode != "dp_fedavg" or not result.get("dp"):
+            continue
+        dp = result["dp"]
+        metrics = result.get("metrics", {})
+        rows.append(
+            {
+                "方案": SCHEME_LABELS.get(mode, mode),
+                "epsilon": dp.get("epsilon", config["epsilon"]),
+                "delta": dp.get("delta", config["delta"]),
+                "clip_norm": dp.get("clip_norm", config["clip_norm"]),
+                "noise_multiplier": dp.get("noise_multiplier", config["noise_multiplier"]),
+                "Accuracy": metrics.get("accuracy"),
+                "F1-score": metrics.get("f1"),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def train_scheme(frame: pd.DataFrame, mode: str, config: dict[str, Any]) -> dict[str, Any]:
@@ -256,6 +311,8 @@ def train_scheme(frame: pd.DataFrame, mode: str, config: dict[str, Any]) -> dict
         dirichlet_alpha=float(config["dirichlet_alpha"]),
         clip_norm=float(config["clip_norm"]),
         noise_multiplier=float(config["noise_multiplier"]),
+        epsilon=float(config["epsilon"]),
+        delta=float(config["delta"]),
         non_iid=config["data_mode"] == "Non-IID",
         seed=int(config["seed"]),
     )
@@ -1100,12 +1157,9 @@ def render_data_upload() -> None:
     with steps[0]:
         with st.container(border=True):
             st.markdown("#### 1. 获取数据")
-            uploaded = st.file_uploader("上传 CSV / Excel 数据", type=["csv", "xlsx", "xls"])
+            uploaded = st.file_uploader("上传 CSV 数据", type=["csv"])
             if uploaded is not None:
-                if uploaded.name.lower().endswith(".csv"):
-                    st.session_state.frame = pd.read_csv(uploaded)
-                else:
-                    st.session_state.frame = pd.read_excel(uploaded)
+                st.session_state.frame = pd.read_csv(uploaded)
                 st.session_state.validation = {"status": "待校验", "message": "新数据已上传，等待校验", "details": {}}
 
             samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
@@ -1156,7 +1210,16 @@ def render_data_upload() -> None:
     with steps[2]:
         with st.container(border=True):
             st.markdown("#### 3. 校验与审核")
+            apply_preprocess = st.checkbox("校验前应用当前预处理配置", value=True)
             if st.button("执行数据校验", type="primary"):
+                if apply_preprocess:
+                    frame = preprocess_tabular_data(
+                        frame,
+                        target_column=config["target_column"],
+                        missing_strategy=config["missing_strategy"],
+                        scaler=config["scaler"],
+                    )
+                    st.session_state.frame = frame
                 st.session_state.validation = validation_status(frame, config["target_column"])
                 st.session_state.clients = sync_clients_with_frame(
                     st.session_state.clients,
@@ -1322,7 +1385,7 @@ def render_training_monitor() -> None:
         with st.container(border=True):
             st.markdown("#### 任务与日志")
             if st.session_state.training_results:
-                st.caption("最近一次训练已完成，结果表和 Loss 曲线已更新。")
+                st.caption("最近一次训练已完成，结果表、Loss 曲线和 Accuracy 曲线已更新。")
             else:
                 st.caption("暂无训练任务。启动训练后，这里会显示任务状态、日志摘要和指标入口。")
 
@@ -1330,13 +1393,16 @@ def render_training_monitor() -> None:
         with st.container(border=True):
             st.markdown("#### 训练结果")
             st.dataframe(results_table(st.session_state.training_results, config), use_container_width=True, hide_index=True)
-        with st.container(border=True):
-            st.markdown("#### Loss 曲线")
-            loss_rows = []
-            for mode, result in st.session_state.training_results.items():
-                for step, loss in enumerate(result["history"]["loss"], start=1):
-                    loss_rows.append({"方案": SCHEME_LABELS[mode], "轮次": step, "Loss": loss})
-            st.plotly_chart(px.line(pd.DataFrame(loss_rows), x="轮次", y="Loss", color="方案", markers=True), use_container_width=True)
+        history = history_frame(st.session_state.training_results)
+        chart_cols = st.columns(2)
+        with chart_cols[0]:
+            with st.container(border=True):
+                st.markdown("#### Loss 曲线")
+                st.plotly_chart(px.line(history, x="轮次", y="Loss", color="方案", markers=True), use_container_width=True)
+        with chart_cols[1]:
+            with st.container(border=True):
+                st.markdown("#### Accuracy 曲线")
+                st.plotly_chart(px.line(history, x="轮次", y="Accuracy", color="方案", markers=True), use_container_width=True)
     else:
         placeholders = st.columns(3)
         for column, title in zip(placeholders, ["任务队列", "运行日志", "指标快照"]):
@@ -1351,13 +1417,12 @@ def render_result_analysis() -> None:
     results = st.session_state.training_results
     config = st.session_state.experiment_config
     if not results:
-        empty_state("暂无训练结果", "完成一次训练后，这里会展示方案对比、指标图表、混淆矩阵和隐私预算分析。", "◈")
-        cols = st.columns(3)
-        for column, title in zip(cols, ["指标卡片", "对比表格", "图表分析"]):
-            with column:
-                with st.container(border=True):
-                    st.markdown(f"#### {title}")
-                    st.caption("等待训练结果生成。")
+        empty_state("暂无训练结果", "请先完成 CSV 数据校验，然后前往训练监控页启动集中式、FedAvg 或 DP-FedAvg 训练。", "◈")
+        cta_cols = st.columns(2)
+        with cta_cols[0]:
+            st.info("下一步：在数据上传与审核页执行校验。")
+        with cta_cols[1]:
+            st.info("校验通过后：前往训练监控页开始训练。")
         return
 
     table = results_table(results, config)
@@ -1376,18 +1441,14 @@ def render_result_analysis() -> None:
     with st.container(border=True):
         st.markdown("#### 指标对比")
         st.plotly_chart(px.bar(metric_rows, x="方案", y="数值", color="指标", barmode="group"), use_container_width=True)
-    if "dp_fedavg" in results:
-        dp_metric = table[table["方案"] == SCHEME_LABELS["dp_fedavg"]]
-        if not dp_metric.empty:
-            privacy = pd.DataFrame(
-                [
-                    {"epsilon": float(config["epsilon"]), "Accuracy": dp_metric.iloc[0]["Accuracy"], "F1-score": dp_metric.iloc[0]["F1-score"]},
-                    {"epsilon": float(config["epsilon"]) * 1.5, "Accuracy": min(1.0, float(dp_metric.iloc[0]["Accuracy"] or 0) + 0.03), "F1-score": min(1.0, float(dp_metric.iloc[0]["F1-score"] or 0) + 0.03)},
-                ]
-            )
-            with st.container(border=True):
-                st.markdown("#### 隐私预算与性能示意")
-                st.plotly_chart(px.line(privacy, x="epsilon", y=["Accuracy", "F1-score"], markers=True), use_container_width=True)
+    privacy = privacy_performance_table(results, config)
+    with st.container(border=True):
+        st.markdown("#### 隐私-性能对比")
+        if privacy.empty:
+            st.info("暂无 DP-FedAvg 结果。训练 DP-FedAvg 后将展示 epsilon、delta、clip_norm、noise_multiplier 与 Accuracy/F1 的对照。")
+        else:
+            st.dataframe(privacy, use_container_width=True, hide_index=True)
+            st.plotly_chart(px.bar(privacy, x="方案", y=["Accuracy", "F1-score"], barmode="group"), use_container_width=True)
 
     tabs = st.tabs([SCHEME_LABELS[mode] for mode in results])
     for tab, (mode, result) in zip(tabs, results.items()):

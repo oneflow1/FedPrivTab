@@ -87,6 +87,11 @@ def preprocess_tabular_data(
     missing_strategy: str = "drop",
     scaler: str = "standard",
 ) -> pd.DataFrame:
+    if missing_strategy not in {"drop", "mean", "median", "mode"}:
+        raise ValueError("missing_strategy must be one of: drop, mean, median, mode")
+    if scaler not in {"none", "standard", "minmax"}:
+        raise ValueError("scaler must be one of: none, standard, minmax")
+
     processed = frame.copy()
     feature_columns = [column for column in processed.columns if column not in {target_column, "client_id"}]
 
@@ -145,17 +150,19 @@ def client_partitions(
     seed: int = 42,
     alpha: float = 0.3,
 ) -> list[np.ndarray]:
+    num_clients = max(1, int(num_clients))
     rng = np.random.default_rng(seed)
     indices = np.arange(len(y))
     if not non_iid:
         rng.shuffle(indices)
-        return [partition for partition in np.array_split(indices, num_clients) if len(partition)]
+        return [np.asarray(partition, dtype=int) for partition in np.array_split(indices, num_clients)]
 
     partitions: list[list[int]] = [[] for _ in range(num_clients)]
+    concentration = max(float(alpha), 1e-6)
     for label in np.unique(y):
         class_indices = indices[y == label]
         rng.shuffle(class_indices)
-        proportions = rng.dirichlet(np.repeat(max(alpha, 1e-3), num_clients))
+        proportions = rng.dirichlet(np.repeat(concentration, num_clients))
         split_points = (np.cumsum(proportions)[:-1] * len(class_indices)).astype(int)
         for client_index, client_indices in enumerate(np.split(class_indices, split_points)):
             partitions[client_index].extend(client_indices.tolist())
@@ -163,8 +170,7 @@ def client_partitions(
     for partition in partitions:
         shuffled = np.array(partition, dtype=int)
         rng.shuffle(shuffled)
-        if len(shuffled):
-            result.append(shuffled)
+        result.append(shuffled)
     return result
 
 

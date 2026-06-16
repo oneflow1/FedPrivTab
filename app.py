@@ -6,17 +6,20 @@ import pandas as pd
 from flask import Flask, jsonify, request
 
 import auth_db
-from data_utils import generate_sample_data, train_test_data, validate_tabular_data
+from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
 from training import TrainConfig, train_model
 
 
 def build_markdown_report(result: dict[str, Any]) -> str:
     metrics = result.get("metrics", {})
+    history = result.get("history", {})
     lines = [
         "# FedPrivTab 实验报告",
         "",
         f"- 训练方案: {result.get('mode', '-')}",
         f"- 数据行数: {result.get('rows', '-')}",
+        "- 模型结构: MLP（二分类表格特征输入，经隐藏层非线性变换后输出 logit）",
+        "- 联邦方案: FedAvg 按客户端样本量对本地模型更新做加权平均；DP-FedAvg 在聚合前对更新裁剪并加入高斯噪声。",
         "",
         "## 评价指标",
         "",
@@ -39,13 +42,35 @@ def build_markdown_report(result: dict[str, Any]) -> str:
     ])
     for item in result.get("client_distribution", []):
         lines.append(f"| {item.get('client')} | {item.get('size')} |")
+    lines.extend([
+        "",
+        "## Accuracy 曲线摘要",
+        "",
+        "| 轮次 | Loss | Accuracy |",
+        "|---:|---:|---:|",
+    ])
+    losses = history.get("loss") or []
+    accuracies = history.get("accuracy") or []
+    for index in range(max(len(losses), len(accuracies))):
+        loss = losses[index] if index < len(losses) else "-"
+        accuracy = accuracies[index] if index < len(accuracies) else "-"
+        lines.append(f"| {index + 1} | {loss} | {accuracy} |")
     if result.get("dp"):
+        dp = result["dp"]
         lines.extend([
             "",
             "## 差分隐私参数",
             "",
-            f"- 裁剪阈值: {result['dp'].get('clip_norm')}",
-            f"- 噪声倍率: {result['dp'].get('noise_multiplier')}",
+            f"- epsilon: {dp.get('epsilon')}",
+            f"- delta: {dp.get('delta')}",
+            f"- clip_norm: {dp.get('clip_norm')}",
+            f"- noise_multiplier: {dp.get('noise_multiplier')}",
+            "",
+            "| epsilon | delta | clip_norm | noise_multiplier | Accuracy | F1 |",
+            "|---:|---:|---:|---:|---:|---:|",
+            f"| {dp.get('epsilon')} | {dp.get('delta')} | {dp.get('clip_norm')} | {dp.get('noise_multiplier')} | {metrics.get('accuracy')} | {metrics.get('f1')} |",
+            "",
+            "DP-FedAvg 使用裁剪 $\\bar{g}_k = g_k \\cdot \\min(1, C / \\|g_k\\|_2)$，并在聚合更新中加入高斯噪声 $\\mathcal{N}(0, \\sigma^2 C^2 I)$；隐私预算以 $(\\epsilon, \\delta)$-DP 摘要呈现。",
         ])
     lines.extend([
         "",
@@ -114,8 +139,19 @@ def sample_data() -> tuple[dict[str, Any], int]:
 def validate() -> tuple[dict[str, Any], int]:
     payload = request.get_json(force=True)
     frame = pd.DataFrame(payload.get("records", []))
-    result = validate_tabular_data(frame, target_column=payload.get("target_column", "target"))
-    return {"valid": result.valid, "message": result.message, "details": result.details}, 200 if result.valid else 400
+    target_column = payload.get("target_column", "target")
+    if payload.get("apply_preprocess", False):
+        frame = preprocess_tabular_data(
+            frame,
+            target_column=target_column,
+            missing_strategy=payload.get("missing_strategy", "drop"),
+            scaler=payload.get("scaler", "standard"),
+        )
+    result = validate_tabular_data(frame, target_column=target_column)
+    response = {"valid": result.valid, "message": result.message, "details": result.details}
+    if payload.get("apply_preprocess", False):
+        response["records"] = frame.to_dict(orient="records")
+    return response, 200 if result.valid else 400
 
 
 @app.post("/train")
@@ -144,6 +180,8 @@ def train() -> tuple[dict[str, Any], int]:
         dirichlet_alpha=float(payload.get("dirichlet_alpha", 0.3)),
         clip_norm=float(payload.get("clip_norm", 1.0)),
         noise_multiplier=float(payload.get("noise_multiplier", 0.2)),
+        epsilon=float(payload.get("epsilon", 4.0)),
+        delta=float(payload.get("delta", 1e-5)),
         non_iid=bool(payload.get("non_iid", False)),
         seed=int(payload.get("seed", 42)),
     )

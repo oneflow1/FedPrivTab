@@ -44,6 +44,8 @@ class TrainConfig:
     dirichlet_alpha: float = 0.3
     clip_norm: float = 1.0
     noise_multiplier: float = 0.2
+    epsilon: float = 4.0
+    delta: float = 1e-5
     non_iid: bool = False
     seed: int = 42
 
@@ -69,6 +71,25 @@ def _train_epoch(model: nn.Module, loader: DataLoader, optimizer: torch.optim.Op
         total_loss += loss.item() * len(features)
         total += len(features)
     return total_loss / max(total, 1)
+
+
+def _evaluate_loader(model: nn.Module, loader: DataLoader, device: torch.device) -> dict[str, float]:
+    model.eval()
+    loss_fn = nn.BCEWithLogitsLoss()
+    total_loss = 0.0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for features, target in loader:
+            features = features.to(device)
+            target = target.to(device)
+            logits = model(features)
+            loss = loss_fn(logits, target)
+            total_loss += loss.item() * len(features)
+            predictions = (torch.sigmoid(logits) >= 0.5).float()
+            correct += int((predictions == target).sum().item())
+            total += len(features)
+    return {"loss": float(total_loss / max(total, 1)), "accuracy": float(correct / max(total, 1))}
 
 
 def _predict_prob(model: nn.Module, x: np.ndarray, device: torch.device) -> np.ndarray:
@@ -134,7 +155,7 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
     device = torch.device("cpu")
     rng = np.random.default_rng(config.seed)
     model = _make_model(x_train.shape[1], config, device)
-    history = {"loss": []}
+    history = {"loss": [], "accuracy": []}
     num_rounds = config.epochs if config.mode == "centralized" else config.rounds
 
     if config.mode == "centralized":
@@ -143,6 +164,8 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
         for _ in range(num_rounds):
             loss = _train_epoch(model, loader, optimizer, device)
             history["loss"].append(float(loss))
+            evaluation = _evaluate_loader(model, loader, device)
+            history["accuracy"].append(float(evaluation["accuracy"]))
     else:
         partitions = client_partitions(
             y_train,
@@ -168,17 +191,9 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
                 client_weights.append(len(partition))
             if client_states:
                 _set_state(model, _average_states(client_states, client_weights))
-            eval_loader = _loader(x_train, y_train, config.batch_size, shuffle=False)
-            with torch.no_grad():
-                loss_fn = nn.BCEWithLogitsLoss()
-                total_loss = 0.0
-                total = 0
-                for features, target in eval_loader:
-                    logits = model(features.to(device))
-                    loss = loss_fn(logits, target.to(device))
-                    total_loss += loss.item() * len(features)
-                    total += len(features)
-            history["loss"].append(float(total_loss / max(total, 1)))
+            evaluation = _evaluate_loader(model, _loader(x_train, y_train, config.batch_size, shuffle=False), device)
+            history["loss"].append(float(evaluation["loss"]))
+            history["accuracy"].append(float(evaluation["accuracy"]))
 
     y_prob = _predict_prob(model, x_test, device)
     metrics = evaluate_predictions(y_test, y_prob)
@@ -196,5 +211,12 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
             }
             for index, partition in enumerate(client_partitions(y_train, config.clients, config.non_iid, config.seed, config.dirichlet_alpha))
         ],
-        "dp": {"clip_norm": config.clip_norm, "noise_multiplier": config.noise_multiplier} if config.mode == "dp_fedavg" else None,
+        "dp": {
+            "epsilon": config.epsilon,
+            "delta": config.delta,
+            "clip_norm": config.clip_norm,
+            "noise_multiplier": config.noise_multiplier,
+        }
+        if config.mode == "dp_fedavg"
+        else None,
     }

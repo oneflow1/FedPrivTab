@@ -21,6 +21,25 @@ def test_health_validate_train_and_report_endpoints() -> None:
     assert validation.status_code == 200
     assert validation.get_json()["valid"] is True
 
+    dirty_records = [dict(record) for record in records]
+    dirty_records[0]["feature_0"] = None
+    preprocessed = client.post(
+        "/validate",
+        data=json.dumps(
+            {
+                "records": dirty_records,
+                "target_column": "target",
+                "apply_preprocess": True,
+                "missing_strategy": "mean",
+                "scaler": "none",
+            }
+        ),
+        content_type="application/json",
+    )
+    assert preprocessed.status_code == 200
+    assert preprocessed.get_json()["valid"] is True
+    assert "records" in preprocessed.get_json()
+
     for mode in ["centralized", "fedavg", "dp_fedavg"]:
         payload = {
             "records": records,
@@ -30,6 +49,8 @@ def test_health_validate_train_and_report_endpoints() -> None:
             "clients": 2,
             "seed": 3,
             "non_iid": True,
+            "epsilon": 3.0,
+            "delta": 1e-5,
         }
         response = client.post("/train", data=json.dumps(payload), content_type="application/json")
         assert response.status_code == 200
@@ -37,13 +58,20 @@ def test_health_validate_train_and_report_endpoints() -> None:
         assert body["mode"] == mode
         assert "metrics" in body
         assert "history" in body
+        assert "accuracy" in body["history"]
         assert "client_distribution" in body
         if mode == "dp_fedavg":
             assert body["dp"] is not None
+            assert body["dp"]["epsilon"] == 3.0
 
         report = client.post("/report", data=json.dumps({"result": body}), content_type="application/json")
         assert report.status_code == 200
-        assert "FedPrivTab 实验报告" in report.get_json()["markdown"]
+        markdown = report.get_json()["markdown"]
+        assert "FedPrivTab 实验报告" in markdown
+        assert "Accuracy 曲线摘要" in markdown
+        if mode == "dp_fedavg":
+            assert "DP-FedAvg" in markdown
+            assert "noise_multiplier" in markdown
 
 
 def test_auth_endpoints() -> None:
