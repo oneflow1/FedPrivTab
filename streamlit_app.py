@@ -1184,34 +1184,34 @@ def render_data_upload() -> None:
         ]
     )
 
-    steps = st.columns(3)
-    with steps[0]:
-        with st.container(border=True):
-            st.markdown("#### 1. 获取数据")
+    with st.container(border=True):
+        st.markdown("#### 一键数据预处理")
+        st.caption("上传 CSV 或生成示例数据后，点击一个按钮自动完成缺失值处理、类别编码、标准化和数据校验。")
+        source_col, config_col, action_col = st.columns([1.2, 1.2, 1])
+        with source_col:
             uploaded = st.file_uploader("上传 CSV 数据", type=["csv"])
             if uploaded is not None:
                 st.session_state.frame = pd.read_csv(uploaded)
-                st.session_state.validation = {"status": "待校验", "message": "新数据已上传，等待校验", "details": {}}
+                st.session_state.validation = {"status": "待校验", "message": "新数据已上传，可一键预处理", "details": {}}
+                frame = st.session_state.frame
+            with st.expander("没有 CSV？生成示例数据", expanded=False):
+                samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
+                features = st.number_input("示例特征数", min_value=2, max_value=50, value=int(config["features"]), step=1)
+                clients = st.number_input("示例客户端数", min_value=2, max_value=20, value=int(config["clients"]), step=1)
+                if st.button("生成示例数据", use_container_width=True):
+                    config.update({"samples": int(samples), "features": int(features), "clients": int(clients)})
+                    st.session_state.frame = generate_sample_data(
+                        samples=int(samples),
+                        features=int(features),
+                        clients=int(clients),
+                        seed=int(config["seed"]),
+                    )
+                    st.session_state.clients = default_clients(int(clients))
+                    st.session_state.validation = {"status": "待校验", "message": "示例数据已生成，可一键预处理", "details": {}}
+                    st.rerun()
 
-            samples = st.number_input("示例样本数", min_value=50, max_value=5000, value=int(config["samples"]), step=10)
-            features = st.number_input("示例特征数", min_value=2, max_value=50, value=int(config["features"]), step=1)
-            clients = st.number_input("示例客户端数", min_value=2, max_value=20, value=int(config["clients"]), step=1)
-            if st.button("生成示例数据"):
-                config.update({"samples": int(samples), "features": int(features), "clients": int(clients)})
-                st.session_state.frame = generate_sample_data(
-                    samples=int(samples),
-                    features=int(features),
-                    clients=int(clients),
-                    seed=int(config["seed"]),
-                )
-                st.session_state.clients = default_clients(int(clients))
-                st.session_state.validation = {"status": "待校验", "message": "示例数据已生成，等待校验", "details": {}}
-                st.rerun()
-
-    frame = st.session_state.frame
-    with steps[1]:
-        with st.container(border=True):
-            st.markdown("#### 2. 预处理")
+        frame = st.session_state.frame
+        with config_col:
             columns = list(frame.columns) if frame is not None else []
             default_index = columns.index(config["target_column"]) if config["target_column"] in columns else 0
             if columns:
@@ -1228,62 +1228,66 @@ def render_data_upload() -> None:
                 index=["standard", "minmax", "none"].index(config.get("scaler", "standard")),
                 format_func={"standard": "StandardScaler", "minmax": "MinMaxScaler", "none": "不标准化"}.get,
             )
-            if st.button("执行预处理"):
-                st.session_state.frame = preprocess_tabular_data(
+
+        with action_col:
+            st.markdown("##### 自动流程")
+            st.write("1. 缺失值处理")
+            st.write("2. 类别/标签编码")
+            st.write("3. 数值标准化")
+            st.write("4. 字段与样本校验")
+            if st.button("一键预处理并校验", type="primary", use_container_width=True, disabled=frame is None or frame.empty):
+                processed = preprocess_tabular_data(
                     frame,
                     target_column=config["target_column"],
                     missing_strategy=config["missing_strategy"],
                     scaler=config["scaler"],
                 )
-                st.session_state.validation = {"status": "待校验", "message": "预处理完成，等待校验", "details": {}}
-                st.rerun()
-
-    with steps[2]:
-        with st.container(border=True):
-            st.markdown("#### 3. 校验与审核")
-            apply_preprocess = st.checkbox("校验前应用当前预处理配置", value=True)
-            if st.button("执行数据校验", type="primary"):
-                if apply_preprocess:
-                    frame = preprocess_tabular_data(
-                        frame,
-                        target_column=config["target_column"],
-                        missing_strategy=config["missing_strategy"],
-                        scaler=config["scaler"],
-                    )
-                    st.session_state.frame = frame
-                st.session_state.validation = validation_status(frame, config["target_column"])
+                st.session_state.frame = processed
+                st.session_state.validation = validation_status(processed, config["target_column"])
                 st.session_state.clients = sync_clients_with_frame(
                     st.session_state.clients,
-                    frame,
+                    processed,
                     st.session_state.validation["status"],
                     config["target_column"],
                 )
                 st.rerun()
+
+    frame = st.session_state.frame
+    if not is_manager():
+        frame = visible_frame_for_user(frame)
+
+    review_col, detail_col = st.columns([1, 2])
+    with review_col:
+        with st.container(border=True):
+            st.markdown("#### 结果与审核")
+            st.markdown(status_tag(st.session_state.validation["status"]), unsafe_allow_html=True)
+            st.caption(st.session_state.validation["message"])
             if is_manager():
                 reject_reason = st.text_input("驳回原因", placeholder="数据不适合参与训练时填写")
-                if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
+                if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过", use_container_width=True):
                     st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
                     st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
                     st.rerun()
-                if st.button("审核驳回", disabled=st.session_state.validation["status"] != "通过"):
+                if st.button("审核驳回", disabled=st.session_state.validation["status"] != "通过", use_container_width=True):
                     message = f"审核驳回：{reject_reason.strip()}" if reject_reason.strip() else "审核驳回：请重新上传更合适的数据"
                     st.session_state.validation = {**st.session_state.validation, "status": "审核驳回", "message": message}
                     st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "审核驳回", config["target_column"])
                     st.rerun()
-            st.markdown(status_tag(st.session_state.validation["status"]), unsafe_allow_html=True)
-            st.caption(st.session_state.validation["message"])
             with st.expander("校验详情", expanded=False):
                 st.json(st.session_state.validation["details"])
 
-    missing = missing_summary(frame)
-    if not missing.empty:
-        with st.container(border=True):
+    with detail_col:
+        if frame is None or frame.empty:
+            empty_state("等待数据", "上传 CSV 或生成示例数据后，可一键完成预处理与校验。", "⇪")
+            return
+        missing = missing_summary(frame)
+        if not missing.empty:
             st.markdown("#### 缺失值摘要")
             st.dataframe(missing, use_container_width=True, hide_index=True)
-    with st.container(border=True):
-        st.markdown("#### 数据预览")
-        st.caption("预览前 50 行，完整训练仍使用当前工作数据集。")
-        st.dataframe(frame.head(50), use_container_width=True)
+        with st.container(border=True):
+            st.markdown("#### 数据预览")
+            st.caption("预览前 50 行，完整训练仍使用当前工作数据集。")
+            st.dataframe(frame.head(50), use_container_width=True)
 
 
 def render_data_analysis() -> None:
