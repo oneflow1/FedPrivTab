@@ -18,6 +18,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 
 
+def is_numeric_like(series: pd.Series) -> bool:
+    if pd.api.types.is_numeric_dtype(series):
+        return True
+    converted = pd.to_numeric(series.dropna(), errors="coerce")
+    return not converted.empty and float(converted.notna().mean()) >= 0.9
+
+
+def numeric_like_series(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(series):
+        return series
+    return pd.to_numeric(series, errors="coerce")
+
+
 @dataclass
 class ValidationResult:
     valid: bool
@@ -79,6 +92,78 @@ def validate_tabular_data(
             "label_classes": [str(label) for label in sorted(labels)],
         },
     )
+
+
+def recommended_missing_strategy(frame: pd.DataFrame, column: str) -> str:
+    if column not in frame.columns:
+        return "mode"
+    series = frame[column]
+    missing_rate = float(series.isna().mean())
+    if missing_rate > 0.4:
+        return "drop"
+    return "median" if is_numeric_like(series) else "mode"
+
+
+def recommended_scaler(frame: pd.DataFrame, column: str) -> str:
+    if column not in frame.columns or not is_numeric_like(frame[column]):
+        return "none"
+    series = numeric_like_series(frame[column]).dropna()
+    if series.empty or series.nunique() <= 2:
+        return "none"
+    return "minmax" if abs(float(series.skew())) > 1.0 else "standard"
+
+
+def apply_column_preprocessing(
+    frame: pd.DataFrame,
+    target_column: str,
+    missing_strategies: dict[str, str] | None = None,
+    scaler_strategies: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    processed = frame.copy()
+    missing_strategies = missing_strategies or {}
+    scaler_strategies = scaler_strategies or {}
+
+    for column in processed.columns:
+        if is_numeric_like(processed[column]):
+            converted = numeric_like_series(processed[column])
+            if converted.notna().any():
+                processed[column] = converted
+
+    drop_columns = [column for column, strategy in missing_strategies.items() if strategy == "drop" and column in processed.columns]
+    if drop_columns:
+        processed = processed.dropna(subset=drop_columns).reset_index(drop=True)
+
+    for column, strategy in missing_strategies.items():
+        if column not in processed.columns or strategy == "drop" or processed[column].isna().sum() == 0:
+            continue
+        if strategy == "mean" and is_numeric_like(processed[column]):
+            value = numeric_like_series(processed[column]).mean()
+        elif strategy == "median" and is_numeric_like(processed[column]):
+            value = numeric_like_series(processed[column]).median()
+        else:
+            mode = processed[column].mode(dropna=True)
+            value = mode.iloc[0] if not mode.empty else 0
+        processed[column] = processed[column].fillna(value)
+
+    processed = preprocess_tabular_data(processed, target_column=target_column, missing_strategy="mode", scaler="none")
+
+    for column, strategy in scaler_strategies.items():
+        if strategy == "none" or column not in processed.columns or not pd.api.types.is_numeric_dtype(processed[column]):
+            continue
+        scaler_obj = StandardScaler() if strategy == "standard" else MinMaxScaler()
+        processed[[column]] = scaler_obj.fit_transform(processed[[column]])
+    return processed
+
+
+def preprocessing_recommendations(frame: pd.DataFrame, target_column: str = "target") -> dict[str, Any]:
+    missing = {}
+    scalers = {}
+    for column in frame.columns:
+        if frame[column].isna().any():
+            missing[column] = recommended_missing_strategy(frame, column)
+        if column not in {target_column, "client_id"} and is_numeric_like(frame[column]):
+            scalers[column] = recommended_scaler(frame, column)
+    return {"missing_strategies": missing, "scaler_strategies": scalers}
 
 
 def preprocess_tabular_data(

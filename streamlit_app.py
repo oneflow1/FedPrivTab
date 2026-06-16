@@ -7,12 +7,22 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.figure_factory as ff
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import requests
 import streamlit as st
 
 import auth_db
 from app import build_markdown_report
-from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
+from data_utils import (
+    apply_column_preprocessing,
+    generate_sample_data,
+    is_numeric_like,
+    numeric_like_series,
+    preprocess_tabular_data,
+    recommended_missing_strategy,
+    recommended_scaler,
+    train_test_data,
+    validate_tabular_data,
+)
 from training import TrainConfig, parse_hidden_units, train_model
 
 
@@ -127,6 +137,32 @@ def initialize_state() -> None:
         st.session_state.auth_user = None
 
 
+def dataframe_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    cleaned = frame.astype(object).where(pd.notna(frame), None)
+    return cleaned.to_dict(orient="records")
+
+
+API_BASE_URL = "http://127.0.0.1:5000"
+
+
+def backend_preprocess(
+    frame: pd.DataFrame,
+    target_column: str,
+    missing_strategies: dict[str, str],
+    scaler_strategies: dict[str, str],
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    payload = {
+        "records": dataframe_records(frame),
+        "target_column": target_column,
+        "missing_strategies": missing_strategies,
+        "scaler_strategies": scaler_strategies,
+    }
+    response = requests.post(f"{API_BASE_URL}/preprocess", json=payload, timeout=120)
+    response.raise_for_status()
+    body = response.json()
+    return pd.DataFrame(body.get("records", [])), body.get("validation", {})
+
+
 def validation_status(frame: pd.DataFrame | None, target_column: str) -> dict[str, Any]:
     if frame is None or frame.empty:
         return {"status": "待校验", "message": "尚未上传或生成数据", "details": {}}
@@ -174,52 +210,6 @@ def missing_summary(frame: pd.DataFrame) -> pd.DataFrame:
     summary.columns = ["column", "missing"]
     summary["missing_rate"] = summary["missing"] / max(len(frame), 1)
     return summary[summary["missing"] > 0].sort_values("missing", ascending=False)
-
-
-def recommended_missing_strategy(frame: pd.DataFrame, column: str) -> str:
-    missing_rate = float(frame[column].isna().mean()) if column in frame.columns else 0.0
-    if missing_rate > 0.4:
-        return "drop"
-    return "median" if pd.api.types.is_numeric_dtype(frame[column]) else "mode"
-
-
-def recommended_scaler(frame: pd.DataFrame, column: str) -> str:
-    if column not in frame.columns or not pd.api.types.is_numeric_dtype(frame[column]):
-        return "none"
-    series = frame[column].dropna()
-    if series.empty or series.nunique() <= 2:
-        return "none"
-    return "minmax" if float(series.skew()) > 1.0 else "standard"
-
-
-def apply_column_preprocessing(
-    frame: pd.DataFrame,
-    target_column: str,
-    missing_strategies: dict[str, str],
-    scaler_strategies: dict[str, str],
-) -> pd.DataFrame:
-    processed = frame.copy()
-    drop_columns = [column for column, strategy in missing_strategies.items() if strategy == "drop" and column in processed.columns]
-    if drop_columns:
-        processed = processed.dropna(subset=drop_columns).reset_index(drop=True)
-    for column, strategy in missing_strategies.items():
-        if column not in processed.columns or strategy == "drop" or processed[column].isna().sum() == 0:
-            continue
-        if strategy == "mean" and pd.api.types.is_numeric_dtype(processed[column]):
-            value = processed[column].mean()
-        elif strategy == "median" and pd.api.types.is_numeric_dtype(processed[column]):
-            value = processed[column].median()
-        else:
-            mode = processed[column].mode(dropna=True)
-            value = mode.iloc[0] if not mode.empty else 0
-        processed[column] = processed[column].fillna(value)
-    processed = preprocess_tabular_data(processed, target_column=target_column, missing_strategy="mode", scaler="none")
-    for column, strategy in scaler_strategies.items():
-        if strategy == "none" or column not in processed.columns or not pd.api.types.is_numeric_dtype(processed[column]):
-            continue
-        scaler = StandardScaler() if strategy == "standard" else MinMaxScaler()
-        processed[[column]] = scaler.fit_transform(processed[[column]])
-    return processed
 
 
 def preprocess_scope() -> str:
@@ -1265,6 +1255,9 @@ def render_data_upload() -> None:
     frame = st.session_state.frame if is_manager() else visible_frame_for_user(st.session_state.frame)
 
     st.caption(f"当前角色的数据处理用途：{scope_label}。一键处理后会保存为训练可选的数据版本。")
+    refresh_notice = st.session_state.pop("preprocessing_refresh_notice", None)
+    if refresh_notice:
+        st.info(f"刷新完成：{refresh_notice}")
     metric_row([
         ("处理用途", scope_label, "由当前登录角色决定"),
         ("原始样本", len(frame) if frame is not None else 0, "上传 CSV 数据"),
@@ -1279,6 +1272,7 @@ def render_data_upload() -> None:
                 st.session_state.frame = pd.read_csv(uploaded)
                 st.session_state.uploaded_file_info = {"name": uploaded.name, "size": uploaded.size}
                 st.session_state.validation = {"status": "待处理", "message": "文件已上传，请选择目标变量并一键处理", "details": {}}
+                st.session_state.preprocessing_refresh_notice = f"已解析 {uploaded.name}，正在刷新目标变量、缺失值摘要和标准化配置。"
             st.success(f"已上传：{uploaded.name}（{uploaded.size} bytes）")
             st.rerun()
         info = st.session_state.get("uploaded_file_info")
@@ -1338,13 +1332,22 @@ def render_data_upload() -> None:
             if st.button("一键处理并保存版本", type="primary", use_container_width=True):
                 with st.spinner("正在处理数据并保存版本..."):
                     try:
-                        processed = apply_column_preprocessing(frame, config["target_column"], missing_strategies, scaler_strategies)
-                        validation = validation_status(processed, config["target_column"])
+                        try:
+                            processed, backend_validation = backend_preprocess(frame, config["target_column"], missing_strategies, scaler_strategies)
+                            validation = {
+                                "status": "通过" if backend_validation.get("valid") else "失败",
+                                "message": backend_validation.get("message", "后端预处理完成"),
+                                "details": backend_validation.get("details", {}),
+                            }
+                        except Exception:
+                            processed = apply_column_preprocessing(frame, config["target_column"], missing_strategies, scaler_strategies)
+                            validation = validation_status(processed, config["target_column"])
                         st.session_state.frame = processed
                         st.session_state.validation = validation
                         if validation["status"] == "通过":
                             scaled_columns = [column for column, strategy in scaler_strategies.items() if strategy != "none"]
                             version = add_preprocess_version(processed, config["target_column"], scope, {**config, "missing_strategy": "按列处理", "scaler": "按列处理"}, scaled_columns)
+                            st.session_state.preprocessing_refresh_notice = f"后端已完成一键处理并保存版本 {version['id']}。"
                             st.session_state.clients = sync_clients_with_frame(st.session_state.clients, processed, validation["status"], config["target_column"])
                             st.success(f"处理完成，已保存版本：{version['id']}")
                         else:
@@ -1370,11 +1373,15 @@ def render_data_upload() -> None:
 def render_data_analysis() -> None:
     st.title("数据分析页")
     st.caption("数据分析页是独立功能，可单独上传指定 CSV 文件进行统计和图表分析。")
+    analysis_notice = st.session_state.pop("analysis_refresh_notice", None)
+    if analysis_notice:
+        st.info(f"刷新完成：{analysis_notice}")
     uploaded = st.file_uploader("上传用于数据分析的 CSV 文件", type=["csv"], key="analysis-upload")
     if uploaded is not None:
         with st.spinner("正在解析分析文件并刷新图表..."):
             st.session_state.analysis_frame = pd.read_csv(uploaded)
             st.session_state.analysis_file_info = {"name": uploaded.name, "size": uploaded.size}
+            st.session_state.analysis_refresh_notice = f"已解析 {uploaded.name}，正在刷新统计摘要和图表。"
         st.success(f"已载入分析文件：{uploaded.name}")
         st.rerun()
 
@@ -1450,6 +1457,10 @@ def render_data_analysis() -> None:
                     st.caption("热力图包含全部可用数值特征。")
                 corr = numeric.corr()
                 st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", color_continuous_scale="RdBu_r"), use_container_width=True)
+    else:
+        with st.container(border=True):
+            st.markdown("#### 相关性热力图")
+            st.info("当前数据没有可用于相关性热力图的数值特征。")
 
 
 def render_experiment_config() -> None:

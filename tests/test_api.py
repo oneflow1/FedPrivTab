@@ -40,6 +40,30 @@ def test_health_validate_train_and_report_endpoints() -> None:
     assert preprocessed.get_json()["valid"] is True
     assert "records" in preprocessed.get_json()
 
+    column_records = [dict(record) for record in records]
+    column_records[0]["feature_0"] = None
+    column_records[1]["numeric_text"] = None
+    for index, record in enumerate(column_records):
+        record["numeric_text"] = None if index == 1 else str(index + 1)
+    column_records = json.loads(json.dumps(column_records, allow_nan=False, default=str))
+    column_preprocessed = client.post(
+        "/preprocess",
+        data=json.dumps(
+            {
+                "records": column_records,
+                "target_column": "target",
+                "missing_strategies": {"feature_0": "median", "numeric_text": "median"},
+                "scaler_strategies": {"feature_0": "standard", "numeric_text": "minmax"},
+            }
+        ),
+        content_type="application/json",
+    )
+    assert column_preprocessed.status_code == 200
+    column_body = column_preprocessed.get_json()
+    assert column_body["validation"]["valid"] is True
+    assert column_body["recommendations"]["missing_strategies"]["numeric_text"] == "median"
+    assert "records" in column_body
+
     for mode in ["centralized", "fedavg", "dp_fedavg"]:
         payload = {
             "records": records,

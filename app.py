@@ -6,7 +6,14 @@ import pandas as pd
 from flask import Flask, jsonify, request
 
 import auth_db
-from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
+from data_utils import (
+    apply_column_preprocessing,
+    generate_sample_data,
+    preprocess_tabular_data,
+    preprocessing_recommendations,
+    train_test_data,
+    validate_tabular_data,
+)
 from training import TrainConfig, parse_hidden_units, train_model
 
 
@@ -211,6 +218,36 @@ def validate() -> tuple[dict[str, Any], int]:
     if payload.get("apply_preprocess", False):
         response["records"] = frame.to_dict(orient="records")
     return response, 200 if result.valid else 400
+
+
+@app.post("/preprocess")
+def preprocess() -> tuple[dict[str, Any], int]:
+    payload = request.get_json(force=True)
+    frame = pd.DataFrame(payload.get("records", []))
+    target_column = payload.get("target_column", "target")
+    if frame.empty:
+        return {"error": "数据为空"}, 400
+    try:
+        recommendations = preprocessing_recommendations(frame, target_column=target_column)
+        missing_strategies = payload.get("missing_strategies") or recommendations["missing_strategies"]
+        scaler_strategies = payload.get("scaler_strategies") or recommendations["scaler_strategies"]
+        processed = apply_column_preprocessing(
+            frame,
+            target_column=target_column,
+            missing_strategies=missing_strategies,
+            scaler_strategies=scaler_strategies,
+        )
+    except Exception as exc:
+        return {"error": f"预处理失败: {exc}"}, 400
+    validation = validate_tabular_data(processed, target_column=target_column)
+    response = {
+        "records": processed.to_dict(orient="records"),
+        "columns": list(processed.columns),
+        "recommendations": recommendations,
+        "validation": {"valid": validation.valid, "message": validation.message, "details": validation.details},
+        "rows": len(processed),
+    }
+    return response, 200 if validation.valid else 400
 
 
 @app.post("/train")
