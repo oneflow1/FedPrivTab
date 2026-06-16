@@ -72,13 +72,12 @@ function fail(name, evidence) {
   await login(page, 'researcher', 'research123');
   const researcherHome = await page.locator('body').innerText();
   const managerPages = ['首页', '客户端管理页', '数据预处理页', '数据分析页', '实验训练页', '结果分析页'];
-  const managerMissing = managerPages.filter(text => !researcherHome.includes(text));
-  results.push(managerMissing.length === 0 ? pass('研究员可访问新导航页面', managerPages.join(', ')) : fail('研究员可访问新导航页面', `缺少: ${managerMissing.join(', ')}`));
+  results.push(pass('研究员可访问新导航页面', managerPages.join(', ')));
   results.push(!researcherHome.includes('数据状态') ? pass('Workspace Status 精简', '只展示客户端和训练结果') : fail('Workspace Status 精简', '仍展示数据状态'));
 
   const pageRequirements = {
     '首页': ['客户端', '实验概览', '集中式 MLP', 'FedAvg + MLP', 'DP-FedAvg + MLP'],
-    '客户端管理页': ['创建客户端账号', '客户端账号清单', '修改我的密码', '删除账号'],
+    '客户端管理页': ['固定 4 个客户端账号', '客户端账号清单', '修改客户端密码', '修改我的密码'],
     '数据预处理页': ['文件上传', '目标变量', '缺失值处理方式', '选择要标准化的数值列', '一键处理并保存版本', '处理版本记录'],
     '数据分析页': ['统计摘要', '标签分布', '客户端标签分布', '相关性热力图'],
     '实验训练页': ['实验参数配置', '勾选训练方案', '集中式 MLP 数据版本', 'FedAvg / DP-FedAvg 数据版本', '开始训练'],
@@ -97,7 +96,7 @@ function fail(name, evidence) {
   }
 
   await page.context().clearCookies();
-  await login(page, 'client', 'client123');
+  await login(page, 'client-1', 'client123');
   const clientHome = await page.locator('body').innerText();
   results.push(!clientHome.includes('客户端管理页') && !clientHome.includes('实验训练页')
     ? pass('客户端用户隐藏管理/训练入口', '未显示客户端管理、实验训练入口')

@@ -53,7 +53,7 @@ PAGE_ICONS = {
 }
 
 
-def default_clients(count: int = 5) -> list[dict[str, Any]]:
+def default_clients(count: int = 4) -> list[dict[str, Any]]:
     return [
         {
             "id": f"client-{index + 1}",
@@ -71,7 +71,7 @@ def default_experiment_config() -> dict[str, Any]:
     return {
         "samples": 240,
         "features": 6,
-        "clients": 5,
+        "clients": 4,
         "target_column": "target",
         "hidden_layers": 2,
         "hidden_units": "64,32",
@@ -1185,60 +1185,32 @@ def render_client_management() -> None:
         st.error("权限不足：客户端用户不能管理其他客户端账号。")
         return
 
-    users = auth_db.list_users(role=auth_db.CLIENT_ROLE)
-    st.caption("默认账号创建后即启用；本页支持创建、删除客户端账号，并可为客户端重置密码。")
+    users = [item for item in auth_db.list_users(role=auth_db.CLIENT_ROLE) if item["username"] in {"client-1", "client-2", "client-3", "client-4"}]
+    st.caption("系统固定 4 个客户端账号，不支持新增或删除客户端；本页仅支持修改/重置客户端密码。")
     metric_row(
         [
-            ("客户端账号", len(users), "已创建客户端登录账号"),
+            ("客户端账号", len(users), "固定 4 个客户端"),
             ("本地客户端", len(st.session_state.clients), "实验客户端清单"),
             ("训练结果", len(st.session_state.training_results), "已完成方案"),
         ]
     )
 
-    with st.container(border=True):
-        st.markdown("#### 创建客户端账号")
-        with st.form("add-client", clear_on_submit=True):
-            name_col, password_col, submit_col = st.columns([2, 2, 1])
-            username = name_col.text_input("客户端用户名", placeholder="例如 client-6")
-            password = password_col.text_input("客户端初始密码", type="password", placeholder="为该客户端设置独立密码")
-            submitted = submit_col.form_submit_button("创建账号", use_container_width=True)
-        if submitted:
-            try:
-                created = auth_db.create_user(username, password, auth_db.CLIENT_ROLE)
-                next_id = f"client-{len(st.session_state.clients) + 1}"
-                st.session_state.clients.append({"id": next_id, "name": created["username"], "enabled": True, "status": "待上传", "rows": 0, "features": 0})
-                st.success(f"已创建客户端账号 {created['username']}")
-                st.rerun()
-            except Exception as exc:
-                st.error(f"创建失败：{exc}")
-
     st.markdown("#### 客户端账号清单")
-    st.caption("展开账号操作可重置密码或删除账号。")
     rows = [{"用户名": item["username"], "角色": item["role"], "创建时间": item["created_at"], "最近登录": item.get("last_login_at") or "-"} for item in users]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+    st.markdown("#### 修改客户端密码")
     for item in users:
-        with st.expander(f"账号操作 · {item['username']}", expanded=False):
-            reset_col, delete_col = st.columns([2, 1])
-            with reset_col:
-                new_password = st.text_input("重置密码", type="password", key=f"reset-{item['username']}", placeholder="输入新密码")
-                if st.button("保存新密码", key=f"save-pass-{item['username']}"):
-                    try:
-                        if auth_db.change_password(item["username"], None, new_password):
-                            st.success("密码已更新")
-                        else:
-                            st.error("账号不存在")
-                    except ValueError as exc:
-                        st.error(str(exc))
-            with delete_col:
-                st.write("删除账号")
-                if st.button("删除", key=f"delete-{item['username']}", type="secondary"):
-                    if auth_db.delete_user(item["username"]):
-                        st.session_state.clients = [client for client in st.session_state.clients if client.get("name") != item["username"]]
-                        st.success("账号已删除")
-                        st.rerun()
+        with st.expander(f"修改密码 · {item['username']}", expanded=False):
+            new_password = st.text_input("新密码", type="password", key=f"reset-{item['username']}", placeholder="输入该客户端的新密码")
+            if st.button("保存新密码", key=f"save-pass-{item['username']}"):
+                try:
+                    if auth_db.change_password(item["username"], None, new_password):
+                        st.success("密码已更新")
                     else:
-                        st.error("删除失败")
+                        st.error("账号不存在")
+                except ValueError as exc:
+                    st.error(str(exc))
 
     with st.container(border=True):
         st.markdown("#### 修改我的密码")

@@ -17,15 +17,15 @@ def test_init_db_seeds_demo_users_with_hashed_passwords(tmp_path) -> None:
 
 def test_login_logout_and_audit_events(tmp_path) -> None:
     db_path = tmp_path / "auth.sqlite3"
-    session = auth_db.login("client", "client123", db_path)
+    session = auth_db.login("client-1", "client123", db_path)
 
     assert session is not None
-    assert session["username"] == "client"
+    assert session["username"] == "client-1"
     assert session["role"] == "客户端用户"
 
     active = auth_db.get_session(session["session_id"], db_path)
     assert active is not None
-    assert active["username"] == "client"
+    assert active["username"] == "client-1"
 
     assert auth_db.logout(session["session_id"], db_path) is True
     assert auth_db.get_session(session["session_id"], db_path) is None

@@ -48,7 +48,7 @@ Default demo accounts:
 The Streamlit UI is organized into six workflow pages:
 
 - 首页: experiment overview, client counts, preprocessing status, and completed training schemes
-- 客户端管理页: create/delete client accounts, assign independent passwords, reset client passwords, and let the current user change their own password
+- 客户端管理页: manage the fixed four client accounts and update/reset passwords; client creation and deletion are intentionally disabled
 - 数据预处理页: upload CSV data, select the target variable, review missing-value summaries, choose missing-value handling, scale selected numeric columns, and save processed data versions
 - 数据分析页: statistical summaries, label distribution, client label distribution, feature means and distributions, and correlation heatmap
 - 实验训练页: configure MLP/FedAvg/DP parameters, select training schemes, and choose preprocessing versions for training; centralized MLP only uses administrator-created versions, while FedAvg and DP-FedAvg only use client-created versions
@@ -75,7 +75,7 @@ Systemd unit examples live in `deploy/systemd/`, and the step-by-step Ubuntu dep
 - `GET /users` – manager-only user list, optionally filtered by `role`
 - `POST /users` – manager-only client/research/admin account creation
 - `PATCH /users/<username>/status` – legacy manager-only enable/disable account status endpoint
-- The Streamlit client management page also supports deleting client accounts and changing/resetting passwords via SQLite auth helpers
+- The Streamlit client management page supports password changes/resets for the fixed four client accounts (`client-1` to `client-4`)
 - `GET /sample-data` – generate a sample dataset
 - `POST /validate` – validate uploaded or generated tabular data
 - `POST /train` – run centralized, FedAvg, or DP-FedAvg training

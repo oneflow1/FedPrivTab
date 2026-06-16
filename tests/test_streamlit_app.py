@@ -7,7 +7,7 @@ import streamlit_app
 
 def test_streamlit_app_helpers_are_importable() -> None:
     config = streamlit_app.default_experiment_config()
-    assert config["clients"] == 5
+    assert config["clients"] == 4
     assert config["rounds"] == 20
     assert config["hidden_units"] == "64,32"
     results = {

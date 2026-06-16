@@ -123,19 +123,19 @@ def test_manager_can_create_disable_and_list_client_users() -> None:
 
     users = client.get("/users?role=客户端用户", headers={"X-Session-Id": session_id})
     assert users.status_code == 200
-    assert any(user["username"] == "client" for user in users.get_json()["users"])
+    assert any(user["username"] == "client-1" for user in users.get_json()["users"])
 
     disabled = client.patch(
-        "/users/client/status",
+        "/users/client-1/status",
         data=json.dumps({"is_active": False}),
         content_type="application/json",
         headers={"X-Session-Id": session_id},
     )
     assert disabled.status_code == 200
-    denied = client.post("/auth/login", data=json.dumps({"username": "client", "password": "client123"}), content_type="application/json")
+    denied = client.post("/auth/login", data=json.dumps({"username": "client-1", "password": "client123"}), content_type="application/json")
     assert denied.status_code == 401
     enabled = client.patch(
-        "/users/client/status",
+        "/users/client-1/status",
         data=json.dumps({"is_active": True}),
         content_type="application/json",
         headers={"X-Session-Id": session_id},
@@ -147,7 +147,7 @@ def test_client_user_cannot_manage_users() -> None:
     client = app.test_client()
     login = client.post(
         "/auth/login",
-        data=json.dumps({"username": "client", "password": "client123"}),
+        data=json.dumps({"username": "client-1", "password": "client123"}),
         content_type="application/json",
     )
     session_id = login.get_json()["session_id"]

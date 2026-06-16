@@ -15,7 +15,10 @@ PBKDF2_ITERATIONS = 200_000
 
 DEFAULT_USERS = [
     ("admin", "admin123", "系统管理员"),
-    ("client", "client123", "客户端用户"),
+    ("client-1", "client123", "客户端用户"),
+    ("client-2", "client123", "客户端用户"),
+    ("client-3", "client123", "客户端用户"),
+    ("client-4", "client123", "客户端用户"),
     ("researcher", "research123", "实验研究人员"),
 ]
 
@@ -92,9 +95,23 @@ def init_db(path: str | Path | None = None) -> None:
             """
         )
         user_count = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        now = utc_now()
         if user_count == 0:
-            now = utc_now()
             for username, password, role in DEFAULT_USERS:
+                salt, password_hash = hash_password(password)
+                connection.execute(
+                    """
+                    INSERT INTO users (username, role, salt, password_hash, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (username, role, salt, password_hash, now),
+                )
+            connection.commit()
+        else:
+            for username, password, role in DEFAULT_USERS:
+                exists = connection.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+                if exists:
+                    continue
                 salt, password_hash = hash_password(password)
                 connection.execute(
                     """
