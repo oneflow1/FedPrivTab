@@ -5,8 +5,8 @@ Wants=fedprivtab-api.service
 
 [Service]
 Type=simple
-User=fedprivtab
-Group=fedprivtab
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/fedprivtab
 Environment=PYTHONUNBUFFERED=1
 Environment=STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
