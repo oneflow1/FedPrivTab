@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from data_utils import client_partitions, generate_sample_data, preprocess_tabular_data, validate_tabular_data
-from training import TrainConfig, train_model
+from training import MLP, TrainConfig, parse_hidden_units, train_model
 
 
 def test_generate_and_validate_sample_data() -> None:
@@ -73,3 +73,12 @@ def test_training_modes_run() -> None:
     assert len(dp_fedavg["history"]["accuracy"]) == 1
     assert dp_fedavg["dp"] is not None
     assert {"epsilon", "delta", "clip_norm", "noise_multiplier"} <= set(dp_fedavg["dp"])
+
+
+def test_hidden_layer_structure_accepts_requirement_default() -> None:
+    parsed = parse_hidden_units("64,32", hidden_layers=2)
+    assert parsed == [64, 32]
+    model = MLP(input_dim=4, hidden_dim=parsed, hidden_layers=2)
+    linear_layers = [layer for layer in model.net if layer.__class__.__name__ == "Linear"]
+    assert linear_layers[0].out_features == 64
+    assert linear_layers[1].out_features == 32

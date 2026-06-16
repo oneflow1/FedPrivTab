@@ -12,15 +12,16 @@ from data_utils import client_partitions, evaluate_predictions
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int = 32, hidden_layers: int = 2, activation: str = "ReLU"):
+    def __init__(self, input_dim: int, hidden_dim: int | list[int] = 32, hidden_layers: int = 2, activation: str = "ReLU"):
         super().__init__()
         activations: dict[str, type[nn.Module]] = {"ReLU": nn.ReLU, "Tanh": nn.Tanh, "LeakyReLU": nn.LeakyReLU}
         activation_cls = activations.get(activation, nn.ReLU)
         layers: list[nn.Module] = []
         current_dim = input_dim
-        for _ in range(max(1, hidden_layers)):
-            layers.extend([nn.Linear(current_dim, hidden_dim), activation_cls()])
-            current_dim = hidden_dim
+        hidden_dims = hidden_dim if isinstance(hidden_dim, list) else [hidden_dim] * max(1, hidden_layers)
+        for units in hidden_dims:
+            layers.extend([nn.Linear(current_dim, int(units)), activation_cls()])
+            current_dim = int(units)
         layers.append(nn.Linear(current_dim, 1))
         self.net = nn.Sequential(*layers)
 
@@ -38,7 +39,7 @@ class TrainConfig:
     batch_size: int = 16
     lr: float = 0.01
     hidden_layers: int = 2
-    hidden_units: int = 32
+    hidden_units: int | list[int] = 32
     activation: str = "ReLU"
     client_fraction: float = 1.0
     dirichlet_alpha: float = 0.3
@@ -129,6 +130,16 @@ def _make_model(input_dim: int, config: TrainConfig, device: torch.device) -> ML
         hidden_layers=config.hidden_layers,
         activation=config.activation,
     ).to(device)
+
+
+def parse_hidden_units(value: Any, hidden_layers: int = 2) -> int | list[int]:
+    if isinstance(value, list):
+        parsed = [int(item) for item in value if int(item) > 0]
+    elif isinstance(value, str) and "," in value:
+        parsed = [int(item.strip()) for item in value.split(",") if item.strip()]
+    else:
+        return int(value)
+    return parsed or [32] * max(1, hidden_layers)
 
 
 def _client_update(base_state: dict[str, torch.Tensor], model: nn.Module, loader: DataLoader, config: TrainConfig, device: torch.device) -> dict[str, torch.Tensor]:

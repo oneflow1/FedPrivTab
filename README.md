@@ -5,7 +5,7 @@ FedPrivTab is a minimal end-to-end federated learning system for tabular data ex
 ## Features
 
 - Streamlit multi-page front end for client management, data review, analysis, experiment configuration, training monitoring, result analysis, and report export
-- Flask back end with health, data validation, sample generation, and training endpoints
+- Flask back end with health, data validation, sample generation, client-account management, and training endpoints
 - Local SQLite login/session/audit persistence with demo role accounts
 - PyTorch MLP training for centralized, FedAvg, and DP-FedAvg workflows
 - Preprocessing helpers for missing values, categorical encoding, and numeric scaling
@@ -74,6 +74,9 @@ Systemd unit examples live in `deploy/systemd/`, and the step-by-step Ubuntu dep
 - `POST /auth/login` – authenticate with `username` and `password`
 - `POST /auth/logout` – close a session by JSON `session_id` or `X-Session-Id`
 - `GET /auth/status` – inspect a session by query `session_id` or `X-Session-Id`
+- `GET /users` – manager-only user list, optionally filtered by `role`
+- `POST /users` – manager-only client/research/admin account creation
+- `PATCH /users/<username>/status` – manager-only enable/disable account status
 - `GET /sample-data` – generate a sample dataset
 - `POST /validate` – validate uploaded or generated tabular data
 - `POST /train` – run centralized, FedAvg, or DP-FedAvg training

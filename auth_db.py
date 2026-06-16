@@ -19,6 +19,9 @@ DEFAULT_USERS = [
     ("researcher", "research123", "实验研究人员"),
 ]
 
+CLIENT_ROLE = "客户端用户"
+MANAGER_ROLES = {"系统管理员", "实验研究人员"}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -132,6 +135,61 @@ def get_user(username: str, path: str | Path | None = None) -> dict[str, Any] | 
             (username,),
         ).fetchone()
     return dict(row) if row else None
+
+
+def list_users(role: str | None = None, path: str | Path | None = None) -> list[dict[str, Any]]:
+    init_db(path)
+    query = "SELECT id, username, role, is_active, created_at, last_login_at FROM users"
+    params: tuple[Any, ...] = ()
+    if role:
+        query += " WHERE role = ?"
+        params = (role,)
+    query += " ORDER BY id"
+    with connect(path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_user(username: str, password: str, role: str = CLIENT_ROLE, path: str | Path | None = None) -> dict[str, Any]:
+    username = username.strip()
+    if not username:
+        raise ValueError("用户名不能为空")
+    if not password:
+        raise ValueError("密码不能为空")
+    if role not in {CLIENT_ROLE, *MANAGER_ROLES}:
+        raise ValueError("不支持的角色")
+    salt, password_hash = hash_password(password)
+    now = utc_now()
+    init_db(path)
+    with connect(path) as connection:
+        cursor = connection.execute(
+            """
+            INSERT INTO users (username, role, salt, password_hash, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (username, role, salt, password_hash, now),
+        )
+        connection.commit()
+    return {"id": cursor.lastrowid, "username": username, "role": role, "is_active": 1, "created_at": now, "last_login_at": None}
+
+
+def set_user_active(username: str, active: bool, path: str | Path | None = None) -> bool:
+    username = username.strip()
+    init_db(path)
+    now = utc_now()
+    with connect(path) as connection:
+        cursor = connection.execute("UPDATE users SET is_active = ? WHERE username = ?", (int(active), username))
+        if not active:
+            connection.execute(
+                """
+                UPDATE sessions
+                SET is_active = 0, logout_at = COALESCE(logout_at, ?), last_seen_at = ?
+                WHERE username = ? AND is_active = 1
+                """,
+                (now, now, username),
+            )
+        connection.commit()
+    return cursor.rowcount > 0
 
 
 def authenticate(username: str, password: str, path: str | Path | None = None) -> dict[str, Any] | None:

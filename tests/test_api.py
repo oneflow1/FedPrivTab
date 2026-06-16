@@ -102,3 +102,54 @@ def test_auth_endpoints() -> None:
     status = client.get(f"/auth/status?session_id={body['session_id']}")
     assert status.status_code == 200
     assert status.get_json()["authenticated"] is False
+
+
+def test_manager_can_create_disable_and_list_client_users() -> None:
+    client = app.test_client()
+    login = client.post(
+        "/auth/login",
+        data=json.dumps({"username": "researcher", "password": "research123"}),
+        content_type="application/json",
+    )
+    session_id = login.get_json()["session_id"]
+
+    created = client.post(
+        "/users",
+        data=json.dumps({"username": "client-api-managed", "password": "client123", "role": "客户端用户"}),
+        content_type="application/json",
+        headers={"X-Session-Id": session_id},
+    )
+    assert created.status_code in {201, 409}
+
+    users = client.get("/users?role=客户端用户", headers={"X-Session-Id": session_id})
+    assert users.status_code == 200
+    assert any(user["username"] == "client" for user in users.get_json()["users"])
+
+    disabled = client.patch(
+        "/users/client/status",
+        data=json.dumps({"is_active": False}),
+        content_type="application/json",
+        headers={"X-Session-Id": session_id},
+    )
+    assert disabled.status_code == 200
+    denied = client.post("/auth/login", data=json.dumps({"username": "client", "password": "client123"}), content_type="application/json")
+    assert denied.status_code == 401
+    enabled = client.patch(
+        "/users/client/status",
+        data=json.dumps({"is_active": True}),
+        content_type="application/json",
+        headers={"X-Session-Id": session_id},
+    )
+    assert enabled.status_code == 200
+
+
+def test_client_user_cannot_manage_users() -> None:
+    client = app.test_client()
+    login = client.post(
+        "/auth/login",
+        data=json.dumps({"username": "client", "password": "client123"}),
+        content_type="application/json",
+    )
+    session_id = login.get_json()["session_id"]
+    response = client.get("/users", headers={"X-Session-Id": session_id})
+    assert response.status_code == 403

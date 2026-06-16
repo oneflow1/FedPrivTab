@@ -7,7 +7,24 @@ from flask import Flask, jsonify, request
 
 import auth_db
 from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
-from training import TrainConfig, train_model
+from training import TrainConfig, parse_hidden_units, train_model
+
+
+MANAGER_ROLES = {"系统管理员", "实验研究人员"}
+
+
+def current_session() -> dict[str, Any] | None:
+    session_id = request.headers.get("X-Session-Id") or request.args.get("session_id")
+    return auth_db.get_session(session_id)
+
+
+def require_manager() -> tuple[dict[str, Any] | None, tuple[dict[str, Any], int] | None]:
+    session = current_session()
+    if not session:
+        return None, ({"error": "未登录"}, 401)
+    if session["role"] not in MANAGER_ROLES:
+        return None, ({"error": "权限不足"}, 403)
+    return session, None
 
 
 def build_markdown_report(result: dict[str, Any]) -> str:
@@ -125,6 +142,48 @@ def auth_status() -> tuple[dict[str, Any], int]:
     }, 200
 
 
+@app.get("/users")
+def list_users() -> tuple[dict[str, Any], int]:
+    _, error = require_manager()
+    if error:
+        return error
+    role = request.args.get("role")
+    return {"users": auth_db.list_users(role=role)}, 200
+
+
+@app.post("/users")
+def create_user() -> tuple[dict[str, Any], int]:
+    _, error = require_manager()
+    if error:
+        return error
+    payload = request.get_json(force=True)
+    try:
+        user = auth_db.create_user(
+            str(payload.get("username", "")),
+            str(payload.get("password", "")),
+            str(payload.get("role", auth_db.CLIENT_ROLE)),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
+    except Exception:
+        return {"error": "账号已存在或创建失败"}, 409
+    return {"user": user}, 201
+
+
+@app.patch("/users/<username>/status")
+def update_user_status(username: str) -> tuple[dict[str, Any], int]:
+    _, error = require_manager()
+    if error:
+        return error
+    payload = request.get_json(force=True)
+    if "is_active" not in payload:
+        return {"error": "缺少 is_active"}, 400
+    updated = auth_db.set_user_active(username, bool(payload["is_active"]))
+    if not updated:
+        return {"error": "用户不存在"}, 404
+    return {"updated": True, "username": username, "is_active": bool(payload["is_active"])}, 200
+
+
 @app.get("/sample-data")
 def sample_data() -> tuple[dict[str, Any], int]:
     samples = int(request.args.get("samples", 240))
@@ -174,7 +233,7 @@ def train() -> tuple[dict[str, Any], int]:
         batch_size=int(payload.get("batch_size", 16)),
         lr=float(payload.get("lr", 0.01)),
         hidden_layers=int(payload.get("hidden_layers", 2)),
-        hidden_units=int(payload.get("hidden_units", 32)),
+        hidden_units=parse_hidden_units(payload.get("hidden_units", "64,32"), int(payload.get("hidden_layers", 2))),
         activation=payload.get("activation", "ReLU"),
         client_fraction=float(payload.get("client_fraction", 1.0)),
         dirichlet_alpha=float(payload.get("dirichlet_alpha", 0.3)),

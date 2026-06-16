@@ -12,7 +12,7 @@ import streamlit as st
 import auth_db
 from app import build_markdown_report
 from data_utils import generate_sample_data, preprocess_tabular_data, train_test_data, validate_tabular_data
-from training import TrainConfig, train_model
+from training import TrainConfig, parse_hidden_units, train_model
 
 
 ROLE_HINTS = {
@@ -34,8 +34,8 @@ PAGES = [
 
 ROLE_PAGES = {
     "系统管理员": PAGES,
-    "客户端用户": ["首页", "客户端管理页", "数据上传与审核页", "数据分析页", "报告导出页"],
-    "实验研究人员": ["首页", "数据分析页", "实验配置页", "训练监控页", "结果分析页", "报告导出页"],
+    "客户端用户": ["首页", "数据上传与审核页", "数据分析页", "报告导出页"],
+    "实验研究人员": PAGES,
 }
 
 SCHEME_LABELS = {
@@ -56,7 +56,7 @@ PAGE_ICONS = {
 }
 
 
-def default_clients(count: int = 4) -> list[dict[str, Any]]:
+def default_clients(count: int = 5) -> list[dict[str, Any]]:
     return [
         {
             "id": f"client-{index + 1}",
@@ -74,22 +74,22 @@ def default_experiment_config() -> dict[str, Any]:
     return {
         "samples": 240,
         "features": 6,
-        "clients": 4,
+        "clients": 5,
         "target_column": "target",
         "hidden_layers": 2,
-        "hidden_units": 32,
+        "hidden_units": "64,32",
         "activation": "ReLU",
-        "epochs": 3,
-        "rounds": 3,
+        "epochs": 20,
+        "rounds": 20,
         "local_epochs": 1,
-        "batch_size": 16,
-        "lr": 0.01,
+        "batch_size": 32,
+        "lr": 0.001,
         "data_mode": "Non-IID",
-        "dirichlet_alpha": 0.3,
+        "dirichlet_alpha": 0.5,
         "client_fraction": 1.0,
         "aggregation": "FedAvg",
         "clip_norm": 1.0,
-        "noise_multiplier": 0.2,
+        "noise_multiplier": 1.0,
         "epsilon": 4.0,
         "delta": 1e-5,
         "missing_strategy": "drop",
@@ -305,7 +305,7 @@ def train_scheme(frame: pd.DataFrame, mode: str, config: dict[str, Any]) -> dict
         batch_size=int(config["batch_size"]),
         lr=float(config["lr"]),
         hidden_layers=int(config["hidden_layers"]),
-        hidden_units=int(config["hidden_units"]),
+        hidden_units=parse_hidden_units(config["hidden_units"], int(config["hidden_layers"])),
         activation=config["activation"],
         client_fraction=float(config["client_fraction"]),
         dirichlet_alpha=float(config["dirichlet_alpha"]),
@@ -958,6 +958,25 @@ def current_user() -> dict[str, Any] | None:
     return dict(user) if user else None
 
 
+def is_manager() -> bool:
+    user = current_user()
+    return bool(user and user.get("role") in {"系统管理员", "实验研究人员"})
+
+
+def visible_frame_for_user(frame: pd.DataFrame | None) -> pd.DataFrame | None:
+    user = current_user()
+    if frame is None or frame.empty or is_manager() or user is None or "client_id" not in frame.columns:
+        return frame
+    username = str(user.get("username", ""))
+    client_ids = {"0", "client"}
+    if username.startswith("client-"):
+        try:
+            client_ids.add(str(max(0, int(username.rsplit("-", 1)[-1]) - 1)))
+        except ValueError:
+            pass
+    return frame[frame["client_id"].astype(str).isin(client_ids)]
+
+
 def allowed_pages(role: str) -> list[str]:
     return ROLE_PAGES.get(role, ["首页"])
 
@@ -1107,6 +1126,9 @@ def render_home() -> None:
 
 def render_client_management() -> None:
     st.title("客户端管理页")
+    if not is_manager():
+        st.error("权限不足：客户端用户不能管理其他客户端账号。")
+        return
     clients_frame = pd.DataFrame(st.session_state.clients)
     enabled = int(clients_frame["enabled"].sum()) if not clients_frame.empty else 0
     metric_row(
@@ -1118,13 +1140,19 @@ def render_client_management() -> None:
     )
 
     with st.container(border=True):
-        st.markdown("#### 添加客户端")
+        st.markdown("#### 创建客户端账号")
         with st.form("add-client", clear_on_submit=True):
-            name_col, submit_col = st.columns([4, 1])
-            name = name_col.text_input("客户端名称", placeholder="例如 client-east-01", label_visibility="collapsed")
+            name_col, password_col, submit_col = st.columns([2, 2, 1])
+            name = name_col.text_input("客户端名称 / 用户名", placeholder="例如 client-6", label_visibility="collapsed")
+            password = password_col.text_input("初始密码", value="client123", type="password", label_visibility="collapsed")
             submitted = submit_col.form_submit_button("新增", use_container_width=True)
         if submitted and name.strip():
             next_id = f"client-{len(st.session_state.clients) + 1}"
+            try:
+                auth_db.create_user(name.strip(), password or "client123", auth_db.CLIENT_ROLE)
+                st.success(f"已创建登录账号 {name.strip()}")
+            except Exception:
+                st.warning("登录账号可能已存在，仅新增客户端清单记录。")
             st.session_state.clients.append(
                 {"id": next_id, "name": name.strip(), "enabled": True, "status": "待校验", "rows": 0, "features": 0}
             )
@@ -1138,6 +1166,7 @@ def render_client_management() -> None:
         label = "禁用" if client["enabled"] else "启用"
         if cols[1].button(label, key=f"toggle-{client['id']}", use_container_width=True):
             st.session_state.clients[index]["enabled"] = not client["enabled"]
+            auth_db.set_user_active(str(client.get("name", "")), st.session_state.clients[index]["enabled"])
             st.rerun()
 
 
@@ -1145,6 +1174,8 @@ def render_data_upload() -> None:
     st.title("数据上传与审核页")
     config = st.session_state.experiment_config
     frame = st.session_state.frame
+    if not is_manager():
+        frame = visible_frame_for_user(frame)
     metric_row(
         [
             ("当前状态", st.session_state.validation["status"], st.session_state.validation["message"]),
@@ -1228,10 +1259,17 @@ def render_data_upload() -> None:
                     config["target_column"],
                 )
                 st.rerun()
-            if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
-                st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
-                st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
-                st.rerun()
+            if is_manager():
+                reject_reason = st.text_input("驳回原因", placeholder="数据不适合参与训练时填写")
+                if st.button("审核通过并启用数据", disabled=st.session_state.validation["status"] != "通过"):
+                    st.session_state.validation = {**st.session_state.validation, "status": "已审核", "message": "数据已审核通过，可参与训练"}
+                    st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "已审核", config["target_column"])
+                    st.rerun()
+                if st.button("审核驳回", disabled=st.session_state.validation["status"] != "通过"):
+                    message = f"审核驳回：{reject_reason.strip()}" if reject_reason.strip() else "审核驳回：请重新上传更合适的数据"
+                    st.session_state.validation = {**st.session_state.validation, "status": "审核驳回", "message": message}
+                    st.session_state.clients = sync_clients_with_frame(st.session_state.clients, frame, "审核驳回", config["target_column"])
+                    st.rerun()
             st.markdown(status_tag(st.session_state.validation["status"]), unsafe_allow_html=True)
             st.caption(st.session_state.validation["message"])
             with st.expander("校验详情", expanded=False):
@@ -1250,7 +1288,7 @@ def render_data_upload() -> None:
 
 def render_data_analysis() -> None:
     st.title("数据分析页")
-    frame = st.session_state.frame
+    frame = visible_frame_for_user(st.session_state.frame)
     target = st.session_state.experiment_config["target_column"]
     if frame is None or frame.empty:
         empty_state("暂无可分析数据", "请先上传或生成数据，并完成必要的预处理。", "◌")
@@ -1318,15 +1356,15 @@ def render_experiment_config() -> None:
             st.markdown("#### 常用配置")
             common_cols = st.columns(2)
             with common_cols[0]:
-                config["data_mode"] = st.radio("数据模式", ["IID", "Non-IID"], index=1 if config["data_mode"] == "Non-IID" else 0, horizontal=True)
+                config["data_mode"] = st.radio("数据模式", ["Non-IID"], index=0, horizontal=True)
                 config["clients"] = st.number_input("客户端数量", 2, 20, int(config["clients"]), step=1)
                 config["rounds"] = st.number_input("通信轮数", 1, 50, int(config["rounds"]), step=1)
             with common_cols[1]:
                 config["hidden_layers"] = st.slider("隐藏层数量", 1, 4, int(config["hidden_layers"]))
-                config["hidden_units"] = st.slider("隐藏层神经元数", 8, 128, int(config["hidden_units"]), step=8)
+                config["hidden_units"] = st.text_input("隐藏层神经元数", value=str(config["hidden_units"]), help="支持 64,32 这样的多层结构")
                 config["activation"] = st.selectbox("激活函数", ["ReLU", "Tanh", "LeakyReLU"], index=["ReLU", "Tanh", "LeakyReLU"].index(config["activation"]))
 
-        with st.expander("高级训练参数", expanded=False):
+        with st.expander("高级训练参数", expanded=True):
             adv_cols = st.columns(2)
             with adv_cols[0]:
                 config["lr"] = st.number_input("学习率", 0.0001, 1.0, float(config["lr"]), step=0.001, format="%.4f")
