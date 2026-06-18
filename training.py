@@ -38,6 +38,10 @@ class TrainConfig:
     local_epochs: int = 1
     batch_size: int = 16
     lr: float = 0.01
+    lr_schedule: str = "constant"
+    lr_decay: float = 0.5
+    lr_step_size: int = 10
+    lr_min: float = 1e-4
     hidden_layers: int = 2
     hidden_units: int | list[int] = 32
     activation: str = "ReLU"
@@ -132,6 +136,20 @@ def _make_model(input_dim: int, config: TrainConfig, device: torch.device) -> ML
     ).to(device)
 
 
+def _scheduled_lr(config: TrainConfig, step_index: int, total_steps: int | None = None) -> float:
+    if config.lr_schedule == "constant":
+        return float(config.lr)
+    if config.lr_schedule == "step_decay":
+        decay_steps = max(1, int(config.lr_step_size))
+        return float(max(config.lr_min, config.lr * (config.lr_decay ** (step_index // decay_steps))))
+    if config.lr_schedule == "linear_decay":
+        if total_steps is None or total_steps <= 1:
+            return float(max(config.lr_min, config.lr))
+        progress = min(max(step_index, 0), total_steps - 1) / (total_steps - 1)
+        return float(max(config.lr_min, config.lr + (config.lr_min - config.lr) * progress))
+    return float(config.lr)
+
+
 def parse_hidden_units(value: Any, hidden_layers: int = 2) -> int | list[int]:
     if isinstance(value, list):
         parsed = [int(item) for item in value if int(item) > 0]
@@ -142,50 +160,72 @@ def parse_hidden_units(value: Any, hidden_layers: int = 2) -> int | list[int]:
     return parsed or [32] * max(1, hidden_layers)
 
 
-def _client_update(base_state: dict[str, torch.Tensor], model: nn.Module, loader: DataLoader, config: TrainConfig, device: torch.device) -> dict[str, torch.Tensor]:
+def _client_update(
+    base_state: dict[str, torch.Tensor],
+    model: nn.Module,
+    loader: DataLoader,
+    config: TrainConfig,
+    device: torch.device,
+    effective_lr: float | None = None,
+) -> dict[str, torch.Tensor]:
     _set_state(model, base_state)
-    optimizer = torch.optim.SGD(model.parameters(), lr=config.lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=config.lr if effective_lr is None else effective_lr)
     for _ in range(config.local_epochs):
         _train_epoch(model, loader, optimizer, device)
     updated = _model_state(model)
+    if config.mode == "fedavg":
+        return updated
+
     delta = {key: updated[key] - base_state[key] for key in base_state}
     flat = torch.cat([value.flatten() for value in delta.values()])
     norm = torch.linalg.norm(flat)
     scale = min(1.0, config.clip_norm / (norm + 1e-12))
     for key in delta:
         delta[key] = delta[key] * scale
-    if config.mode == "dp_fedavg":
-        for key in delta:
-            delta[key] = delta[key] + torch.normal(0.0, config.noise_multiplier * config.clip_norm, size=delta[key].shape)
+    for key in delta:
+        delta[key] = delta[key] + torch.normal(0.0, config.noise_multiplier * config.clip_norm, size=delta[key].shape)
     return {key: base_state[key] + delta[key] for key in base_state}
 
 
-def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_test: np.ndarray, config: TrainConfig) -> dict[str, Any]:
+def train_model(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+    config: TrainConfig,
+    client_partitions_override: list[np.ndarray] | None = None,
+    client_labels: list[str] | None = None,
+) -> dict[str, Any]:
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
     device = torch.device("cpu")
     rng = np.random.default_rng(config.seed)
     model = _make_model(x_train.shape[1], config, device)
-    history = {"loss": [], "accuracy": []}
+    history = {"loss": [], "accuracy": [], "lr": []}
     num_rounds = config.epochs if config.mode == "centralized" else config.rounds
 
     if config.mode == "centralized":
         loader = _loader(x_train, y_train, config.batch_size, shuffle=True)
         optimizer = torch.optim.SGD(model.parameters(), lr=config.lr)
-        for _ in range(num_rounds):
+        for step_index in range(num_rounds):
+            effective_lr = _scheduled_lr(config, step_index, num_rounds)
+            for group in optimizer.param_groups:
+                group["lr"] = effective_lr
             loss = _train_epoch(model, loader, optimizer, device)
             history["loss"].append(float(loss))
+            history["lr"].append(float(effective_lr))
             evaluation = _evaluate_loader(model, loader, device)
             history["accuracy"].append(float(evaluation["accuracy"]))
     else:
-        partitions = client_partitions(
+        partitions = client_partitions_override or client_partitions(
             y_train,
             num_clients=config.clients,
             non_iid=config.non_iid,
             seed=config.seed,
             alpha=config.dirichlet_alpha,
         )
-        for _ in range(num_rounds):
+        for step_index in range(num_rounds):
+            effective_lr = _scheduled_lr(config, step_index, num_rounds)
             base_state = _model_state(model)
             client_states = []
             client_weights = []
@@ -197,31 +237,42 @@ def train_model(x_train: np.ndarray, y_train: np.ndarray, x_test: np.ndarray, y_
                     continue
                 client_loader = _loader(x_train[partition], y_train[partition], config.batch_size, shuffle=True)
                 client_model = _make_model(x_train.shape[1], config, device)
-                updated_state = _client_update(base_state, client_model, client_loader, config, device)
+                updated_state = _client_update(base_state, client_model, client_loader, config, device, effective_lr)
                 client_states.append(updated_state)
                 client_weights.append(len(partition))
             if client_states:
                 _set_state(model, _average_states(client_states, client_weights))
             evaluation = _evaluate_loader(model, _loader(x_train, y_train, config.batch_size, shuffle=False), device)
             history["loss"].append(float(evaluation["loss"]))
+            history["lr"].append(float(effective_lr))
             history["accuracy"].append(float(evaluation["accuracy"]))
 
     y_prob = _predict_prob(model, x_test, device)
     metrics = evaluate_predictions(y_test, y_prob)
+    client_distribution = []
+    if config.mode != "centralized":
+        partitions = client_partitions_override or client_partitions(y_train, config.clients, config.non_iid, config.seed, config.dirichlet_alpha)
+        client_distribution = [
+            {
+                "client": client_labels[index] if client_labels and index < len(client_labels) else f"client-{index + 1}",
+                "size": int(len(partition)),
+                "positive": int(y_train[partition].sum()),
+                "negative": int(len(partition) - y_train[partition].sum()),
+            }
+            for index, partition in enumerate(partitions)
+        ]
+    protocol = (
+        "集中式训练：数据合并在同一训练集上训练 MLP，不涉及客户端、参数传输或服务端聚合。"
+        if config.mode == "centralized"
+        else "服务端托管 FL 模拟：管理端上传并预处理一次数据，服务端按 client_id 列或确定性 4 路切分模拟客户端分区；每个分区训练本地模型更新，FedAvg 按样本量聚合模型参数更新。"
+    )
     return {
         "mode": config.mode,
         "metrics": metrics,
         "history": history,
         "predictions": y_prob.tolist(),
-        "client_distribution": [
-            {
-                "client": index,
-                "size": int(len(partition)),
-                "positive": int(y_train[partition].sum()),
-                "negative": int(len(partition) - y_train[partition].sum()),
-            }
-            for index, partition in enumerate(client_partitions(y_train, config.clients, config.non_iid, config.seed, config.dirichlet_alpha))
-        ],
+        "client_distribution": client_distribution,
+        "protocol": protocol,
         "dp": {
             "epsilon": config.epsilon,
             "delta": config.delta,

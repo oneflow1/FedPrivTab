@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>FedPrivTab：交互形式 + API 形式对比三个模型</title>
+  <style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans CJK SC","Microsoft YaHei",Arial,sans-serif;line-height:1.72;color:#1f2933;margin:0;background:#f7f8fa}
+main{max-width:980px;margin:0 auto;background:#fff;padding:44px 56px;box-shadow:0 0 0 1px #e5e7eb}
+h1{font-size:30px;line-height:1.25;margin:0 0 24px}h2{font-size:23px;margin-top:34px;border-bottom:1px solid #e5e7eb;padding-bottom:8px}h3{font-size:18px;margin-top:26px}
+table{border-collapse:collapse;width:100%;font-size:13px;margin:16px 0}th,td{border:1px solid #d7dce2;padding:7px 9px;text-align:left;vertical-align:top}th{background:#eef2f5}
+img{max-width:100%;height:auto}figure{margin:18px 0 30px}figcaption{font-size:12px;color:#5b6570;margin-top:8px}.ui-shot img{border:1px solid #d7dce2;border-radius:6px}
+code{background:#f1f5f9;padding:1px 4px;border-radius:3px}pre{background:#0f172a;color:#e5e7eb;overflow:auto;padding:14px 16px;border-radius:6px;font-size:11px;line-height:1.45}pre code{background:transparent;padding:0;color:inherit}.note{background:#f6f8fa;border-left:4px solid #73808c;padding:10px 14px}
+  </style>
+</head>
+<body>
+<main>
+  <h1>FedPrivTab：交互形式 + API 形式对比三个模型</h1>
+  <p>GitHub：<a href="https://github.com/oneflow1/FedPrivTab">https://github.com/oneflow1/FedPrivTab</a></p>
+  <p>生成时间：2026-06-18 06:13:49 UTC。本 HTML 对照展示交互式产品流程、真实 API 脚本、matplotlib 绘图代码和对应 PNG 输出。</p>
+  <h2>一、交互形式：产品精简版训练流程</h2><p>这一部分按 README 风格概览 FedPrivTab 的产品化训练路径：先登录进入工作台，再完成客户端数据准备，随后分别运行集中式 MLP、FedAvg MLP 和 DP-FedAvg MLP，最后在结果分析页查看指标与曲线。</p><figure class='ui-shot'><img src='ui_screenshots/01_login.png' alt='登录页：输入账号后进入 FedPrivTab 产品工作台。'><figcaption>图：登录页：输入账号后进入 FedPrivTab 产品工作台。</figcaption></figure><figure class='ui-shot'><img src='ui_screenshots/02_home.png' alt='首页工作台：从导航入口进入数据准备、模型训练和结果分析流程。'><figcaption>图：首页工作台：从导航入口进入数据准备、模型训练和结果分析流程。</figcaption></figure><figure class='ui-shot'><img src='ui_screenshots/03_client_data_preparation.png' alt='客户端数据准备：上传或选择各客户端 CSV，完成联邦训练前的数据校验与预处理。'><figcaption>图：客户端数据准备：上传或选择各客户端 CSV，完成联邦训练前的数据校验与预处理。</figcaption></figure><figure class='ui-shot'><img src='ui_screenshots/04_centralized_training.png' alt='集中式 MLP 训练：选择合并数据集并配置 epochs、学习率和 MLP 结构。'><figcaption>图：集中式 MLP 训练：选择合并数据集并配置 epochs、学习率和 MLP 结构。</figcaption></figure><figure class='ui-shot'><img src='ui_screenshots/05_distributed_training.png' alt='分布式 FedAvg / DP-FedAvg 训练：选择客户端数据集、通信轮次、客户端比例和 DP 参数。'><figcaption>图：分布式 FedAvg / DP-FedAvg 训练：选择客户端数据集、通信轮次、客户端比例和 DP 参数。</figcaption></figure><figure class='ui-shot'><img src='ui_screenshots/06_results_analysis.png' alt='结果分析：对比集中式 MLP、FedAvg MLP 与 DP-FedAvg MLP 的训练曲线和指标。'><figcaption>图：结果分析：对比集中式 MLP、FedAvg MLP 与 DP-FedAvg MLP 的训练曲线和指标。</figcaption></figure>
+  <h2>二、API 形式：真实接口训练脚本</h2>
+  <p>API 执行模式：<code>http</code>。<code>experiment_results.json</code> 是 <code>/train</code> API 响应对象的缓存副本；当 <code>RUN_API_EXPERIMENTS=False</code> 时从缓存恢复 <code>api_results</code>，当该标志为 True 时同一个变量直接来自实时 <code>/train</code> 调用。<code>metrics_summary.csv</code> 只是由 API 结果派生出的辅助导出表，不作为绘图数据源。</p>
+  <h2>默认配置来源</h2>
+  <p>主实验默认配置由紧凑消融实验选择，消融记录保存于 <code>default_config_ablation.json</code>。集中式 MLP、FedAvg MLP 与 DP-FedAvg MLP 都使用相同 MLP 架构：<code>hidden_layers=2</code>、<code>hidden_units='64,32'</code>、<code>activation='ReLU'</code>。</p>
+  <pre><code>import json
+import time
+from pathlib import Path
+
+import requests
+
+API_BASE = &#x27;http://127.0.0.1:5000&#x27;
+RUN_API_EXPERIMENTS = False
+ROOT = Path(&#x27;.&#x27;)
+OUT_DIR = ROOT / &#x27;data/mywork/final_outputs&#x27;
+RESULTS_JSON = OUT_DIR / &#x27;experiment_results.json&#x27;
+
+
+def post_preprocess(csv_path, client_id=None, role=&#x27;centralized&#x27;):
+    &quot;&quot;&quot;Upload one CSV to /preprocess?async=true. role is &#x27;client&#x27;/&#x27;centralized&#x27;.&quot;&quot;&quot;
+    csv_path = Path(csv_path)
+    data = {&#x27;role&#x27;: role}
+    if client_id is not None:
+        data[&#x27;client_id&#x27;] = client_id
+    with csv_path.open(&#x27;rb&#x27;) as fh:
+        files = {&#x27;file&#x27;: (csv_path.name, fh, &#x27;text/csv&#x27;)}
+        response = requests.post(
+            f&#x27;{API_BASE}/preprocess?async=true&#x27;,
+            files=files,
+            data=data,
+            timeout=60,
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+def wait_job(job_id, poll_seconds=2, timeout_seconds=1800):
+    &quot;&quot;&quot;Poll /jobs/&lt;job_id&gt; until the async preprocessing job completes or fails.&quot;&quot;&quot;
+    deadline = time.time() + timeout_seconds
+    while time.time() &lt; deadline:
+        response = requests.get(f&#x27;{API_BASE}/jobs/{job_id}&#x27;, timeout=30)
+        response.raise_for_status()
+        payload = response.json()
+        job = payload.get(&#x27;job&#x27;, payload)
+        status = job.get(&#x27;status&#x27;)
+        if status in {&#x27;completed&#x27;, &#x27;failed&#x27;}:
+            if status == &#x27;failed&#x27;:
+                raise RuntimeError(job)
+            return job
+        time.sleep(poll_seconds)
+    raise TimeoutError(f&#x27;Job {job_id} did not finish within {timeout_seconds} seconds&#x27;)
+
+
+def completed_preprocess_result(start_response):
+    job = start_response.get(&#x27;job&#x27;, start_response)
+    job_id = job.get(&#x27;job_id&#x27;) or job.get(&#x27;id&#x27;)
+    if job_id:
+        job = wait_job(job_id)
+        return job.get(&#x27;result&#x27;, job)
+    return start_response
+
+
+def post_train(payload):
+    response = requests.post(f&#x27;{API_BASE}/train&#x27;, json=payload, timeout=1800)
+    response.raise_for_status()
+    return response.json()
+
+
+client_csvs = [
+    (&#x27;client-1&#x27;, ROOT / &#x27;data/processed/adult_noniid_client_1.csv&#x27;),
+    (&#x27;client-2&#x27;, ROOT / &#x27;data/processed/adult_noniid_client_2.csv&#x27;),
+    (&#x27;client-3&#x27;, ROOT / &#x27;data/processed/adult_noniid_client_3.csv&#x27;),
+    (&#x27;client-4&#x27;, ROOT / &#x27;data/processed/adult_noniid_client_4.csv&#x27;),
+]
+
+if RUN_API_EXPERIMENTS:
+    central_preprocess = completed_preprocess_result(
+        post_preprocess(ROOT / &#x27;data/raw/adult.csv&#x27;, role=&#x27;centralized&#x27;)
+    )
+    client_preprocess = [
+        completed_preprocess_result(post_preprocess(csv_path, client_id=client_id, role=&#x27;client&#x27;))
+        for client_id, csv_path in client_csvs
+    ]
+else:
+    # experiment_results.json is a cached copy of previous /train API responses.
+    # It is used only when RUN_API_EXPERIMENTS=False to avoid rerunning heavy training.
+    saved = json.loads(RESULTS_JSON.read_text(encoding=&#x27;utf-8&#x27;))
+    central_preprocess = saved[&#x27;metadata&#x27;][&#x27;central_preprocess&#x27;]
+    client_preprocess = saved[&#x27;metadata&#x27;][&#x27;client_preprocess&#x27;]
+
+central_dataset_id = central_preprocess[&#x27;dataset_id&#x27;]
+client_dataset_ids = [
+    item[&#x27;dataset_id&#x27;]
+    for item in client_preprocess
+]
+client_datasets = [
+    {&#x27;client_id&#x27;: item[&#x27;client_id&#x27;], &#x27;dataset_id&#x27;: item[&#x27;dataset_id&#x27;]}
+    for item in client_preprocess
+]
+
+centralized_payload = {
+    &#x27;target_column&#x27;: &#x27;income&#x27;,
+    &#x27;batch_size&#x27;: 128,
+    &#x27;hidden_layers&#x27;: 2,
+    &#x27;hidden_units&#x27;: &#x27;64,32&#x27;,
+    &#x27;activation&#x27;: &#x27;ReLU&#x27;,
+    &#x27;epochs&#x27;: 50,
+    &#x27;lr&#x27;: 0.05,
+    &#x27;lr_schedule&#x27;: &#x27;step_decay&#x27;,
+    &#x27;lr_decay&#x27;: 0.5,
+    &#x27;lr_step_size&#x27;: 15,
+    &#x27;lr_min&#x27;: 0.005,
+    &#x27;seed&#x27;: 42,
+    &#x27;mode&#x27;: &#x27;centralized&#x27;,
+    &#x27;dataset_id&#x27;: central_dataset_id,
+}
+
+fedavg_payload = {
+    &#x27;target_column&#x27;: &#x27;income&#x27;,
+    &#x27;clients&#x27;: 4,
+    &#x27;local_epochs&#x27;: 1,
+    &#x27;batch_size&#x27;: 32,
+    &#x27;hidden_layers&#x27;: 2,
+    &#x27;hidden_units&#x27;: &#x27;64,32&#x27;,
+    &#x27;activation&#x27;: &#x27;ReLU&#x27;,
+    &#x27;rounds&#x27;: 50,
+    &#x27;lr&#x27;: 0.05,
+    &#x27;lr_schedule&#x27;: &#x27;step_decay&#x27;,
+    &#x27;lr_decay&#x27;: 0.5,
+    &#x27;lr_step_size&#x27;: 15,
+    &#x27;lr_min&#x27;: 0.005,
+    &#x27;seed&#x27;: 42,
+    &#x27;client_fraction&#x27;: 1.0,
+    &#x27;mode&#x27;: &#x27;fedavg&#x27;,
+    &#x27;dirichlet_alpha&#x27;: 0.3,
+    &#x27;client_dataset_ids&#x27;: client_dataset_ids,
+    &#x27;client_datasets&#x27;: client_datasets,
+}
+
+dp_fedavg_payload = {
+    **fedavg_payload,
+    &#x27;mode&#x27;: &#x27;dp_fedavg&#x27;,
+    &#x27;noise_multiplier&#x27;: 0.1,
+    &#x27;lr&#x27;: 0.03,
+    &#x27;lr_schedule&#x27;: &#x27;step_decay&#x27;,
+    &#x27;lr_decay&#x27;: 0.5,
+    &#x27;lr_step_size&#x27;: 15,
+    &#x27;lr_min&#x27;: 0.005,
+    &#x27;epsilon&#x27;: 4.0,
+    &#x27;delta&#x27;: 1e-5,
+    &#x27;clip_norm&#x27;: 1.0,
+}
+
+if RUN_API_EXPERIMENTS:
+    api_results = [
+        {&#x27;name&#x27;: &#x27;centralized_mlp&#x27;, &#x27;requested_config&#x27;: centralized_payload, **post_train(centralized_payload)},
+        {&#x27;name&#x27;: &#x27;fedavg_mlp&#x27;, &#x27;requested_config&#x27;: fedavg_payload, **post_train(fedavg_payload)},
+        {&#x27;name&#x27;: &#x27;dp_fedavg_mlp&#x27;, &#x27;requested_config&#x27;: dp_fedavg_payload, **post_train(dp_fedavg_payload)},
+    ]
+else:
+    # Same variable shape as live /train runs, loaded from the cached API response record.
+    api_results = saved[&#x27;results&#x27;]
+
+experiments = {item[&#x27;name&#x27;]: item for item in api_results}
+
+{
+    &#x27;central_dataset_id&#x27;: central_dataset_id,
+    &#x27;client_dataset_ids&#x27;: client_dataset_ids,
+    &#x27;client_datasets&#x27;: client_datasets,
+    &#x27;train_payload_modes&#x27;: [
+        centralized_payload[&#x27;mode&#x27;],
+        fedavg_payload[&#x27;mode&#x27;],
+        dp_fedavg_payload[&#x27;mode&#x27;],
+    ],
+    &#x27;api_results_source&#x27;: &#x27;live /train calls&#x27; if RUN_API_EXPERIMENTS else &#x27;cached /train API responses in experiment_results.json&#x27;,
+    &#x27;loaded_existing_results&#x27;: not RUN_API_EXPERIMENTS,
+}
+</code></pre>
+  <h2>主要指标</h2>
+  <table><thead><tr><th>实验</th><th>模式</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>AUC</th><th>噪声系数</th><th>alpha</th></tr></thead><tbody><tr><td>centralized_mlp</td><td>centralized</td><td>0.8531</td><td>0.7268</td><td>0.6245</td><td>0.6718</td><td>0.9083</td><td></td><td></td></tr><tr><td>fedavg_mlp</td><td>fedavg</td><td>0.8428</td><td>0.7332</td><td>0.5454</td><td>0.6255</td><td>0.8962</td><td></td><td>0.3000</td></tr><tr><td>dp_fedavg_mlp</td><td>dp_fedavg</td><td>0.8118</td><td>0.6877</td><td>0.4000</td><td>0.5058</td><td>0.8537</td><td>0.1000</td><td>0.3000</td></tr><tr><td>dp_noise_0.1</td><td>dp_fedavg</td><td>0.8118</td><td>0.6877</td><td>0.4000</td><td>0.5058</td><td>0.8537</td><td>0.1000</td><td>0.3000</td></tr><tr><td>dp_noise_0.2</td><td>dp_fedavg</td><td>0.7756</td><td>0.5400</td><td>0.4582</td><td>0.4957</td><td>0.7707</td><td>0.2000</td><td>0.3000</td></tr><tr><td>dp_noise_0.5</td><td>dp_fedavg</td><td>0.4850</td><td>0.3027</td><td>0.8740</td><td>0.4497</td><td>0.6681</td><td>0.5000</td><td>0.3000</td></tr><tr><td>alpha_0.1</td><td>fedavg</td><td>0.8428</td><td>0.7332</td><td>0.5454</td><td>0.6255</td><td>0.8962</td><td></td><td>0.1000</td></tr><tr><td>alpha_0.3</td><td>fedavg</td><td>0.8428</td><td>0.7332</td><td>0.5454</td><td>0.6255</td><td>0.8962</td><td></td><td>0.3000</td></tr><tr><td>alpha_1.0</td><td>fedavg</td><td>0.8428</td><td>0.7332</td><td>0.5454</td><td>0.6255</td><td>0.8962</td><td></td><td>1.0000</td></tr></tbody></table>
+  <p class="note">alpha 敏感性实验使用显式客户端 CSV 固定划分，因此 alpha 主要是配置记录，不代表重新按 Dirichlet 分布切分后的客户端数据。</p>
+  <section class='chart-section'><h2>三模型 Accuracy/F1/AUC 对比</h2><p>集中式 MLP、FedAvg MLP 与 DP-FedAvg MLP 的 Accuracy、F1 和 AUC 对比。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+main_names = [&#x27;centralized_mlp&#x27;, &#x27;fedavg_mlp&#x27;, &#x27;dp_fedavg_mlp&#x27;]
+label_map = {
+    &#x27;centralized_mlp&#x27;: &#x27;Centralized MLP&#x27;,
+    &#x27;fedavg_mlp&#x27;: &#x27;FedAvg MLP&#x27;,
+    &#x27;dp_fedavg_mlp&#x27;: &#x27;DP-FedAvg MLP&#x27;,
+}
+metrics = [&#x27;accuracy&#x27;, &#x27;f1&#x27;, &#x27;auc&#x27;]
+plot_rows = [metric_row(name) for name in main_names]
+x = np.arange(len(main_names))
+width = 0.24
+fig, ax = plt.subplots(figsize=(8.4, 4.8), dpi=140)
+colors = [&#x27;#28666e&#x27;, &#x27;#c75000&#x27;, &#x27;#5b5f97&#x27;]
+for offset, metric, color in zip([-width, 0, width], metrics, colors):
+    values = [row[metric] for row in plot_rows]
+    bars = ax.bar(x + offset, values, width, label=metric.upper(), color=color)
+    ax.bar_label(bars, fmt=&#x27;%.3f&#x27;, fontsize=8, padding=2)
+ax.set_xticks(x)
+ax.set_xticklabels([label_map[name] for name in main_names], rotation=12, ha=&#x27;right&#x27;)
+ax.set_ylim(0, 1.02)
+ax.set_ylabel(&#x27;Score&#x27;)
+ax.set_title(&#x27;Main Model Accuracy / F1 / AUC&#x27;)
+ax.grid(axis=&#x27;y&#x27;, alpha=0.28)
+ax.legend(ncols=3, loc=&#x27;lower right&#x27;)
+fig.tight_layout()
+plt.show()</code></pre><figure><img src='figures_matplotlib/metric_bar_accuracy_f1_auc.png' alt='三模型 Accuracy/F1/AUC 对比'><figcaption>metric_bar_accuracy_f1_auc.png</figcaption></figure></section><section class='chart-section'><h2>训练 Accuracy 曲线</h2><p>三类主要训练流程的 Accuracy 随 epoch/round 的变化。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+main_names = [&#x27;centralized_mlp&#x27;, &#x27;fedavg_mlp&#x27;, &#x27;dp_fedavg_mlp&#x27;]
+label_map = {
+    &#x27;centralized_mlp&#x27;: &#x27;Centralized MLP&#x27;,
+    &#x27;fedavg_mlp&#x27;: &#x27;FedAvg MLP&#x27;,
+    &#x27;dp_fedavg_mlp&#x27;: &#x27;DP-FedAvg MLP&#x27;,
+}
+fig, ax = plt.subplots(figsize=(8.4, 4.8), dpi=140)
+for name in main_names:
+    values = experiments[name][&#x27;history&#x27;][&#x27;accuracy&#x27;]
+    lr_values = experiments[name][&#x27;history&#x27;].get(&#x27;lr&#x27;, [])
+    lr_note = &#x27;&#x27;
+    if lr_values:
+        lr_note = f&quot; (LR {lr_values[0]:.3f}-&gt;{lr_values[-1]:.3f})&quot;
+    ax.plot(range(1, len(values) + 1), values, marker=&#x27;o&#x27;, linewidth=2, label=label_map[name] + lr_note)
+ax.set_xlabel(&#x27;Epoch / Communication round&#x27;)
+ax.set_ylabel(&#x27;Training accuracy&#x27;)
+ax.set_title(&#x27;Training Accuracy Curves (all main models use step-decay LR)&#x27;)
+ax.set_ylim(0.72, 0.86)
+ax.grid(alpha=0.28)
+ax.legend()
+fig.tight_layout()
+plt.show()</code></pre><figure><img src='figures_matplotlib/training_accuracy_curves.png' alt='训练 Accuracy 曲线'><figcaption>training_accuracy_curves.png</figcaption></figure></section><section class='chart-section'><h2>训练 Loss 曲线</h2><p>三类主要训练流程的 Loss 随 epoch/round 的变化。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+main_names = [&#x27;centralized_mlp&#x27;, &#x27;fedavg_mlp&#x27;, &#x27;dp_fedavg_mlp&#x27;]
+label_map = {
+    &#x27;centralized_mlp&#x27;: &#x27;Centralized MLP&#x27;,
+    &#x27;fedavg_mlp&#x27;: &#x27;FedAvg MLP&#x27;,
+    &#x27;dp_fedavg_mlp&#x27;: &#x27;DP-FedAvg MLP&#x27;,
+}
+fig, ax = plt.subplots(figsize=(8.4, 4.8), dpi=140)
+for name in main_names:
+    values = experiments[name][&#x27;history&#x27;][&#x27;loss&#x27;]
+    lr_values = experiments[name][&#x27;history&#x27;].get(&#x27;lr&#x27;, [])
+    lr_note = &#x27;&#x27;
+    if lr_values:
+        lr_note = f&quot; (LR {lr_values[0]:.3f}-&gt;{lr_values[-1]:.3f})&quot;
+    ax.plot(range(1, len(values) + 1), values, marker=&#x27;o&#x27;, linewidth=2, label=label_map[name] + lr_note)
+ax.set_xlabel(&#x27;Epoch / Communication round&#x27;)
+ax.set_ylabel(&#x27;Training loss&#x27;)
+ax.set_title(&#x27;Training Loss Curves (all main models use step-decay LR)&#x27;)
+ax.grid(alpha=0.28)
+ax.legend()
+fig.tight_layout()
+plt.show()</code></pre><figure><img src='figures_matplotlib/training_loss_curves.png' alt='训练 Loss 曲线'><figcaption>training_loss_curves.png</figcaption></figure></section><section class='chart-section'><h2>三模型混淆矩阵</h2><p>集中式 MLP、FedAvg MLP 与 DP-FedAvg MLP 的混淆矩阵。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+main_names = [&#x27;centralized_mlp&#x27;, &#x27;fedavg_mlp&#x27;, &#x27;dp_fedavg_mlp&#x27;]
+label_map = {
+    &#x27;centralized_mlp&#x27;: &#x27;Centralized MLP&#x27;,
+    &#x27;fedavg_mlp&#x27;: &#x27;FedAvg MLP&#x27;,
+    &#x27;dp_fedavg_mlp&#x27;: &#x27;DP-FedAvg MLP&#x27;,
+}
+class_labels = [&#x27;&lt;=50K&#x27;, &#x27;&gt;50K&#x27;]
+matrices = {
+    name: np.array(experiments[name][&#x27;metrics&#x27;][&#x27;confusion_matrix&#x27;])
+    for name in main_names
+}
+vmax = max(int(matrix.max()) for matrix in matrices.values())
+fig, axes = plt.subplots(1, 3, figsize=(11.2, 4.2), dpi=140)
+for idx, (ax, name) in enumerate(zip(axes, main_names)):
+    matrix = matrices[name]
+    metrics = experiments[name][&#x27;metrics&#x27;]
+    ax.imshow(matrix, cmap=&#x27;Blues&#x27;, vmin=0, vmax=vmax)
+    ax.set_title(
+        f&quot;{label_map[name]}\n&quot;
+        f&quot;Acc {metrics[&#x27;accuracy&#x27;]:.3f} | F1 {metrics[&#x27;f1&#x27;]:.3f} | AUC {metrics[&#x27;auc&#x27;]:.3f}&quot;,
+        fontsize=9,
+        fontweight=&#x27;normal&#x27;,
+    )
+    ax.set_xlabel(&#x27;Predicted income&#x27;)
+    if idx == 0:
+        ax.set_ylabel(&#x27;True income&#x27;)
+    ax.set_xticks([0, 1], labels=class_labels)
+    ax.set_yticks([0, 1], labels=class_labels)
+    row_totals = matrix.sum(axis=1, keepdims=True)
+    row_percentages = np.divide(
+        matrix,
+        row_totals,
+        out=np.zeros_like(matrix, dtype=float),
+        where=row_totals != 0,
+    ) * 100
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            color = &#x27;white&#x27; if matrix[i, j] &gt; vmax * 0.50 else &#x27;#1f2933&#x27;
+            ax.text(
+                j,
+                i,
+                f&#x27;{matrix[i, j]:,}\n{row_percentages[i, j]:.1f}%&#x27;,
+                ha=&#x27;center&#x27;,
+                va=&#x27;center&#x27;,
+                color=color,
+                fontsize=8,
+            )
+fig.suptitle(&#x27;Confusion Matrices (shared color scale)&#x27;, y=0.96, fontsize=12)
+fig.subplots_adjust(left=0.07, right=0.985, top=0.76, bottom=0.18, wspace=0.38)
+plt.show()</code></pre><figure><img src='figures_matplotlib/confusion_matrices_main_models.png' alt='三模型混淆矩阵'><figcaption>confusion_matrices_main_models.png</figcaption></figure></section><section class='chart-section'><h2>DP 噪声敏感性</h2><p>不同 noise_multiplier 下 DP-FedAvg 的指标变化，反映隐私扰动与效用之间的经验权衡。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+noise_rows = [metric_row(name) for name in experiments if name.startswith(&#x27;dp_noise_&#x27;)]
+noise_rows = sorted(noise_rows, key=lambda row: row[&#x27;noise_multiplier&#x27;])
+noise_values = [row[&#x27;noise_multiplier&#x27;] for row in noise_rows]
+lr_values = experiments[&#x27;dp_noise_0.1&#x27;][&#x27;history&#x27;].get(&#x27;lr&#x27;, [])
+fig, ax = plt.subplots(figsize=(8.4, 4.8), dpi=140)
+for metric, color in [(&#x27;accuracy&#x27;, &#x27;#28666e&#x27;), (&#x27;f1&#x27;, &#x27;#c75000&#x27;), (&#x27;auc&#x27;, &#x27;#5b5f97&#x27;)]:
+    ax.plot(noise_values, [row[metric] for row in noise_rows], marker=&#x27;o&#x27;, linewidth=2, label=metric.upper(), color=color)
+ax.set_xlabel(&#x27;Noise multiplier&#x27;)
+ax.set_ylabel(&#x27;Score&#x27;)
+ax.set_title(f&#x27;DP Noise Sensitivity (shared step-decay LR {lr_values[0]:.3f}-&gt;{lr_values[-1]:.3f})&#x27; if lr_values else &#x27;DP Noise Sensitivity&#x27;)
+ax.set_ylim(0.48, 0.92)
+ax.grid(alpha=0.28)
+ax.legend()
+fig.tight_layout()
+plt.show()</code></pre><figure><img src='figures_matplotlib/dp_noise_sensitivity.png' alt='DP 噪声敏感性'><figcaption>dp_noise_sensitivity.png</figcaption></figure></section><section class='chart-section'><h2>alpha 敏感性</h2><p>本实验使用显式客户端 CSV 固定划分，因此 alpha 主要是配置记录，不代表重新采样后的 Dirichlet Non-IID 强度。</p><pre><code>from pathlib import Path
+import json
+import numpy as np
+import matplotlib.pyplot as plt
+
+out = Path(&#x27;data/mywork/final_outputs&#x27;)
+if not out.exists():
+    out = Path.cwd()
+# Plotting data comes from cached /train API response objects, not CSV summaries.
+results = json.loads((out / &#x27;experiment_results.json&#x27;).read_text(encoding=&#x27;utf-8&#x27;))
+experiments = {item[&#x27;name&#x27;]: item for item in results[&#x27;results&#x27;]}
+
+def metric_row(name):
+    item = experiments[name]
+    requested = item.get(&#x27;requested_config&#x27;) or {}
+    dp = item.get(&#x27;dp&#x27;) or {}
+    return {
+        &#x27;name&#x27;: name,
+        **(item.get(&#x27;metrics&#x27;) or {}),
+        &#x27;noise_multiplier&#x27;: dp.get(&#x27;noise_multiplier&#x27;, requested.get(&#x27;noise_multiplier&#x27;)),
+        &#x27;dirichlet_alpha&#x27;: requested.get(&#x27;dirichlet_alpha&#x27;),
+    }
+
+alpha_rows = [metric_row(name) for name in experiments if name.startswith(&#x27;alpha_&#x27;)]
+alpha_rows = sorted(alpha_rows, key=lambda row: row[&#x27;dirichlet_alpha&#x27;])
+alpha_values = [row[&#x27;dirichlet_alpha&#x27;] for row in alpha_rows]
+fig, ax = plt.subplots(figsize=(8.4, 4.8), dpi=140)
+for metric, color in [(&#x27;accuracy&#x27;, &#x27;#28666e&#x27;), (&#x27;f1&#x27;, &#x27;#c75000&#x27;), (&#x27;auc&#x27;, &#x27;#5b5f97&#x27;)]:
+    ax.plot(alpha_values, [row[metric] for row in alpha_rows], marker=&#x27;o&#x27;, linewidth=2, label=metric.upper(), color=color)
+ax.set_xlabel(&#x27;Requested dirichlet_alpha&#x27;)
+ax.set_ylabel(&#x27;Score&#x27;)
+ax.set_title(&#x27;Alpha Sensitivity with Fixed Explicit Client CSV Partitions&#x27;)
+ax.set_ylim(0.55, 0.92)
+ax.grid(alpha=0.28)
+ax.legend()
+ax.text(0.5, 0.575, &#x27;Fixed client_id CSV partitions; alpha is recorded config, not resampling.&#x27;, ha=&#x27;center&#x27;, fontsize=9)
+fig.tight_layout()
+plt.show()</code></pre><figure><img src='figures_matplotlib/alpha_sensitivity.png' alt='alpha 敏感性'><figcaption>alpha_sensitivity.png</figcaption></figure></section>
+  <h2>结论</h2>
+  <p>集中式模型是合并数据参照；FedAvg 显示固定 Non-IID 客户端划分下的协作训练效果；DP-FedAvg 展示裁剪和高斯噪声带来的隐私-效用权衡。由于没有严格隐私 accountant，本实验不宣称 Opacus 级别的可证明隐私预算。</p>
+</main>
+</body>
+</html>

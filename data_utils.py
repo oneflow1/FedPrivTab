@@ -18,6 +18,33 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 
 
+ADULT_TARGET_CANDIDATES = ("income", "target", "class")
+ADULT_POSITIVE_LABELS = {">50k", ">50k.", "1", "true", "yes"}
+ADULT_NEGATIVE_LABELS = {"<=50k", "<=50k.", "0", "false", "no"}
+
+
+def normalize_missing_markers(frame: pd.DataFrame) -> pd.DataFrame:
+    processed = frame.copy()
+    return processed.replace({"?": np.nan, " ?": np.nan, "? ": np.nan, "": np.nan})
+
+
+def infer_adult_target_column(frame: pd.DataFrame, fallback: str = "target") -> str:
+    for column in ADULT_TARGET_CANDIDATES:
+        if column in frame.columns:
+            return column
+    return fallback if fallback in frame.columns else (frame.columns[-1] if len(frame.columns) else fallback)
+
+
+def normalize_binary_target(series: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(series):
+        return series.astype(int)
+    normalized = series.astype(str).str.strip().str.lower()
+    mapped = normalized.map(lambda value: 1 if value in ADULT_POSITIVE_LABELS else 0 if value in ADULT_NEGATIVE_LABELS else np.nan)
+    if mapped.notna().all():
+        return mapped.astype(int)
+    return pd.Series(LabelEncoder().fit_transform(series.astype(str)), index=series.index)
+
+
 def is_numeric_like(series: pd.Series) -> bool:
     if pd.api.types.is_numeric_dtype(series):
         return True
@@ -62,6 +89,7 @@ def validate_tabular_data(
     min_samples: int = 20,
     max_missing_rate: float = 0.2,
 ) -> ValidationResult:
+    target_column = infer_adult_target_column(frame, target_column)
     if frame.empty:
         return ValidationResult(False, "数据为空", {"rows": 0})
     if target_column not in frame.columns:
@@ -156,6 +184,8 @@ def apply_column_preprocessing(
 
 
 def preprocessing_recommendations(frame: pd.DataFrame, target_column: str = "target") -> dict[str, Any]:
+    frame = normalize_missing_markers(frame)
+    target_column = infer_adult_target_column(frame, target_column)
     missing = {}
     scalers = {}
     for column in frame.columns:
@@ -177,7 +207,8 @@ def preprocess_tabular_data(
     if scaler not in {"none", "standard", "minmax"}:
         raise ValueError("scaler must be one of: none, standard, minmax")
 
-    processed = frame.copy()
+    processed = normalize_missing_markers(frame)
+    target_column = infer_adult_target_column(processed, target_column)
     feature_columns = [column for column in processed.columns if column not in {target_column, "client_id"}]
 
     if missing_strategy == "drop":
@@ -195,13 +226,18 @@ def preprocess_tabular_data(
                 value = mode.iloc[0] if not mode.empty else 0
             processed[column] = processed[column].fillna(value)
 
-    if target_column in processed.columns and not pd.api.types.is_numeric_dtype(processed[target_column]):
-        processed[target_column] = LabelEncoder().fit_transform(processed[target_column].astype(str))
+    if target_column in processed.columns:
+        processed[target_column] = normalize_binary_target(processed[target_column])
 
-    for column in feature_columns:
-        if column in processed.columns and not pd.api.types.is_numeric_dtype(processed[column]):
-            processed[column] = LabelEncoder().fit_transform(processed[column].astype(str))
+    categorical_features = [
+        column
+        for column in feature_columns
+        if column in processed.columns and not pd.api.types.is_numeric_dtype(processed[column])
+    ]
+    if categorical_features:
+        processed = pd.get_dummies(processed, columns=categorical_features, prefix=categorical_features, dummy_na=False)
 
+    feature_columns = [column for column in processed.columns if column not in {target_column, "client_id"}]
     numeric_features = [column for column in feature_columns if column in processed.columns and pd.api.types.is_numeric_dtype(processed[column])]
     if numeric_features and scaler != "none":
         scaler_obj = StandardScaler() if scaler == "standard" else MinMaxScaler()
@@ -210,6 +246,7 @@ def preprocess_tabular_data(
 
 
 def split_features_target(frame: pd.DataFrame, target_column: str = "target") -> tuple[np.ndarray, np.ndarray, list[str]]:
+    target_column = infer_adult_target_column(frame, target_column)
     feature_columns = [column for column in frame.columns if column != target_column and column != "client_id"]
     x = frame[feature_columns].to_numpy(dtype=np.float32)
     y = frame[target_column].to_numpy(dtype=np.int64)

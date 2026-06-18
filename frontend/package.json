@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 8501",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 8501"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "latest",
+    "echarts": "^6.1.0",
+    "element-plus": "^2.14.2",
+    "vite": "latest",
+    "vue": "latest"
+  }
+}

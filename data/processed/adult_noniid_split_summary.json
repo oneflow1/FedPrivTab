@@ -1,0 +1,54 @@
+{
+  "source": "/opt/data/report/FedPrivTab/data/raw/adult.csv",
+  "method": "balanced label-skew Non-IID split",
+  "target_column": "income",
+  "clients": 4,
+  "seed": 42,
+  "total_rows": 32561,
+  "source_label_distribution": {
+    "<=50K": 24720,
+    ">50K": 7841
+  },
+  "files": [
+    {
+      "client_id": "client-1",
+      "path": "/opt/data/report/FedPrivTab/data/processed/adult_noniid_client_1.csv",
+      "rows": 8141,
+      "label_distribution": {
+        "<=50K": 7741,
+        ">50K": 400
+      },
+      "positive_rate": 0.04913401302051345
+    },
+    {
+      "client_id": "client-2",
+      "path": "/opt/data/report/FedPrivTab/data/processed/adult_noniid_client_2.csv",
+      "rows": 8140,
+      "label_distribution": {
+        "<=50K": 6940,
+        ">50K": 1200
+      },
+      "positive_rate": 0.14742014742014742
+    },
+    {
+      "client_id": "client-3",
+      "path": "/opt/data/report/FedPrivTab/data/processed/adult_noniid_client_3.csv",
+      "rows": 8140,
+      "label_distribution": {
+        "<=50K": 5640,
+        ">50K": 2500
+      },
+      "positive_rate": 0.3071253071253071
+    },
+    {
+      "client_id": "client-4",
+      "path": "/opt/data/report/FedPrivTab/data/processed/adult_noniid_client_4.csv",
+      "rows": 8140,
+      "label_distribution": {
+        "<=50K": 4399,
+        ">50K": 3741
+      },
+      "positive_rate": 0.45958230958230956
+    }
+  ]
+}

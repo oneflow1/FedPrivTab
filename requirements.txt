@@ -4,5 +4,4 @@ pandas
 plotly
 scikit-learn
 torch
-streamlit
 pytest

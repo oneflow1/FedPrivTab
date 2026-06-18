@@ -1,0 +1,17 @@
+[Unit]
+Description=FedPrivTab Vue UI
+After=network.target fedprivtab-api.service
+Wants=fedprivtab-api.service
+
+[Service]
+Type=simple
+User=fedprivtab
+Group=fedprivtab
+WorkingDirectory=/opt/fedprivtab/frontend/dist
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/fedprivtab/.venv/bin/python -m http.server 8501 --bind 0.0.0.0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

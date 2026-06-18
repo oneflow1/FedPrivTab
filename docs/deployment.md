@@ -3,9 +3,9 @@
 This project can run as two systemd services on an Ubuntu server:
 
 - `fedprivtab-api.service`: Flask API on port `5000`
-- `fedprivtab-streamlit.service`: Streamlit UI on port `8501`
+- `fedprivtab-ui.service`: Vue static UI on port `8501`
 
-The examples use `/opt/fedprivtab` and the `ubuntu` service user used by the current deployment. Adjust paths and users if your server layout differs. Streamlit usage statistics are disabled in `.streamlit/config.toml` and the systemd unit to prevent external telemetry/webhook requests from blocking upload workflows.
+The examples use `/opt/fedprivtab` and the `fedprivtab` service user. Adjust paths and users if your server layout differs.
 
 Authentication state is stored in SQLite. By default the database is `/opt/fedprivtab/fedprivtab_auth.sqlite3` when services run from the project directory. Set `FEDPRIVTAB_AUTH_DB=/var/lib/fedprivtab/auth.sqlite3` in both systemd units if you want the database outside the application directory.
 
@@ -30,20 +30,20 @@ sudo -u fedprivtab .venv/bin/pip install -r requirements.txt
 
 ```bash
 sudo cp deploy/systemd/fedprivtab-api.service /etc/systemd/system/
-sudo cp deploy/systemd/fedprivtab-streamlit.service /etc/systemd/system/
+sudo cp deploy/systemd/fedprivtab-ui.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now fedprivtab-api fedprivtab-streamlit
+sudo systemctl enable --now fedprivtab-api fedprivtab-ui
 ```
 
 ## 3. Check status
 
 ```bash
 systemctl status fedprivtab-api
-systemctl status fedprivtab-streamlit
+systemctl status fedprivtab-ui
 curl http://127.0.0.1:5000/health
 ```
 
-Open `http://SERVER_IP:8501` for the Streamlit UI. If the server has a firewall, allow only the ports you need:
+Open `http://SERVER_IP:8501` for the Vue UI. If the server has a firewall, allow only the ports you need:
 
 ```bash
 sudo ufw allow 8501/tcp
@@ -64,7 +64,7 @@ After copying a new version to `/opt/fedprivtab`, reinstall changed Python depen
 ```bash
 cd /opt/fedprivtab
 sudo -u fedprivtab .venv/bin/pip install -r requirements.txt
-sudo systemctl restart fedprivtab-api fedprivtab-streamlit
+sudo systemctl restart fedprivtab-api fedprivtab-ui
 ```
 
 No external secrets are required by the default demo configuration. Passwords are stored as salted PBKDF2 hashes, not plaintext.
