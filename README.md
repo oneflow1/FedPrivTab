@@ -2,8 +2,6 @@
 
 FedPrivTab 是一个面向 Adult Census Income 二分类任务的表格数据联邦学习实验系统，用于在同一套数据与流程下对比三类模型：集中式 MLP、FedAvg MLP 和 DP-FedAvg MLP。项目包含 Vue 3 + Vite 前端、Flask API 后端、PyTorch 训练代码、默认演示账号、Notebook 实验产物与 Ubuntu systemd 部署示例。
 
-GitHub 地址：https://github.com/oneflow1/FedPrivTab
-
 ## 项目简介
 
 本项目当前聚焦固定的 Adult Census Income 收入预测场景，支持从数据准备、字段检查、预处理、训练配置、模型训练到结果分析的完整流程。后端默认运行在 `5000` 端口，前端开发服务默认运行在 `8501` 端口。
@@ -49,7 +47,7 @@ npm install
 npm run dev
 ```
 
-前端默认监听 `http://127.0.0.1:8501`。当前项目已经移除 Streamlit 旧版入口，不再提供 Streamlit 启动方式。
+前端默认监听 `http://127.0.0.1:8501`。
 
 ## 默认账号
 
@@ -58,11 +56,6 @@ npm run dev
 | 用户名 | 密码 | 角色 |
 |---|---|---|
 | `admin` | `admin123` | 系统管理员 |
-| `researcher` | `research123` | 实验研究人员 |
-| `client-1` | `client123` | 客户端用户 |
-| `client-2` | `client123` | 客户端用户 |
-| `client-3` | `client123` | 客户端用户 |
-| `client-4` | `client123` | 客户端用户 |
 
 ## 训练配置默认值
 
@@ -159,7 +152,7 @@ Ubuntu systemd 示例位于 `deploy/systemd/`：
 - `fedprivtab-api.service`：Flask API，端口 `5000`。
 - `fedprivtab-ui.service`：Vue 静态 UI，端口 `8501`。
 
-详细步骤见 `docs/deployment.md`。源码仓库建议不提交 `frontend/dist/`，部署时在目标环境执行 `npm run build` 生成静态文件。
+源码仓库建议不提交 `frontend/dist/`，部署时在目标环境执行 `npm run build` 生成静态文件，并按目标环境配置服务入口与静态资源托管。
 
 ## 注意事项
 
