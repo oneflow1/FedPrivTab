@@ -480,7 +480,7 @@ ax.text(0.5, 0.575, &#x27;Fixed client_id CSV partitions; alpha is recorded conf
 fig.tight_layout()
 plt.show()</code></pre><figure><img src='figures_matplotlib/alpha_sensitivity.png' alt='alpha 敏感性'><figcaption>alpha_sensitivity.png</figcaption></figure></section>
   <h2>结论</h2>
-  <p>集中式模型是合并数据参照；FedAvg 显示固定 Non-IID 客户端划分下的协作训练效果；DP-FedAvg 展示裁剪和高斯噪声带来的隐私-效用权衡。由于没有严格隐私 accountant，本实验不宣称 Opacus 级别的可证明隐私预算。</p>
+  <p>集中式模型是合并数据参照；FedAvg 显示固定 Non-IID 客户端划分下的协作训练效果；DP-FedAvg 展示 L2 裁剪和高斯噪声机制带来的隐私-效用权衡。由于没有集成 Opacus 或严格 privacy accountant，本实验中的 epsilon/delta 只作为记录和配置的实验参数。</p>
 </main>
 </body>
 </html>

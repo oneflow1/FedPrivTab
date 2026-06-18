@@ -83,8 +83,8 @@ DP-FedAvg 默认隐私机制参数：
 
 - `clip_norm=1.0`
 - `noise_multiplier=0.1`
-- `epsilon=4.0`
-- `delta=1e-5`
+- `epsilon=4.0`（记录/配置的实验参数）
+- `delta=1e-5`（记录/配置的实验参数）
 
 ## Notebook/实验产物
 
@@ -98,6 +98,8 @@ Notebook 标题为 `FedPrivTab：交互形式 + API 形式对比三个模型`，
 
 - Vue 交互式训练流程截图说明。
 - 真实 `/preprocess` 与 `/train` API 调用脚本。
+- `experiment_results.json`：真实 `/train` API 响应缓存。
+- `metrics_summary.csv`：由上述 JSON 派生的指标摘要表。
 - 集中式 MLP、FedAvg MLP、DP-FedAvg MLP 三模型结果对比。
 - 学习率轨迹、准确率、F1 等 Matplotlib 图表。
 
@@ -157,7 +159,7 @@ Ubuntu systemd 示例位于 `deploy/systemd/`：
 ## 注意事项
 
 - 本项目当前实验范围固定为 Adult Census Income，不是通用数据集管理平台。
-- DP-FedAvg 是机制演示：代码对客户端更新做 L2 裁剪并加入高斯噪声，但没有集成 Opacus，也没有提供严格的隐私会计证明。
+- DP-FedAvg 是机制演示：代码对客户端更新做 L2 裁剪并加入高斯噪声；`epsilon`/`delta` 是本项目记录和配置的实验参数，不是 Opacus 或严格 privacy accountant 推导出的隐私保证。
 - FedAvg 和 DP-FedAvg 训练要求先完成客户端数据准备，不能直接使用集中式 `dataset_id`。
 - 默认账号仅用于演示和本地实验，公开部署前应修改密码并妥善配置 SQLite 存储路径。
 - `frontend/node_modules/`、`frontend/dist/`、缓存、日志和本地运行数据库不应作为源码提交。

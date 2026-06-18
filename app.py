@@ -113,7 +113,7 @@ def build_markdown_report(result: dict[str, Any]) -> str:
             "|---:|---:|---:|---:|---:|---:|",
             f"| {dp.get('epsilon')} | {dp.get('delta')} | {dp.get('clip_norm')} | {dp.get('noise_multiplier')} | {metrics.get('accuracy')} | {metrics.get('f1')} |",
             "",
-            "DP-FedAvg 使用裁剪 $\\bar{g}_k = g_k \\cdot \\min(1, C / \\|g_k\\|_2)$，并在聚合更新中加入高斯噪声 $\\mathcal{N}(0, \\sigma^2 C^2 I)$；隐私预算以 $(\\epsilon, \\delta)$-DP 摘要呈现。",
+            "DP-FedAvg 使用裁剪 $\\bar{g}_k = g_k \\cdot \\min(1, C / \\|g_k\\|_2)$，并在聚合更新中加入高斯噪声 $\\mathcal{N}(0, \\sigma^2 C^2 I)$；本项目中的 epsilon/delta 是记录和配置的实验参数，不是严格隐私 accountant 推导的保证。",
         ])
     lines.extend([
         "",
